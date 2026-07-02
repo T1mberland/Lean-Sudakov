@@ -1,2 +1,3 @@
 import LeanSudakov.Deterministic
+import LeanSudakov.GaussianIBP
 import LeanSudakov.SudakovFernique
