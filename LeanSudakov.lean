@@ -1,4 +1,5 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianIBP
+import LeanSudakov.GaussianVectorIBP
 import LeanSudakov.LSECalculus
 import LeanSudakov.SudakovFernique
