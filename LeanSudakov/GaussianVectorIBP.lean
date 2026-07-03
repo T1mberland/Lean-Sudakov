@@ -596,6 +596,89 @@ theorem continuousLinearMap_apply_eq_sum_single
       rw [hsingle, map_smul]
       simp [smul_eq_mul]
 
+/-- Coordinate expansion of a continuous linear functional on a finite coordinate space. -/
+theorem continuousLinearMap_apply_eq_sum_single_scalar
+    {κ : Type*} [Fintype κ] [DecidableEq κ]
+    (L : (κ → ℝ) →L[ℝ] ℝ) (z : κ → ℝ) :
+    L z = Finset.univ.sum fun a => z a * L (Pi.single a 1) := by
+  calc
+    L z = L (Finset.univ.sum fun a => Pi.single a (z a)) := by
+      rw [LinearMap.sum_single_apply (fun _ : κ => ℝ) z]
+    _ = Finset.univ.sum fun a => L (Pi.single a (z a)) := by
+      rw [map_sum]
+    _ = Finset.univ.sum fun a => z a * L (Pi.single a 1) := by
+      refine Finset.sum_congr rfl fun a _ => ?_
+      have hsingle : Pi.single a (z a) = z a • (Pi.single a (1 : ℝ) : κ → ℝ) := by
+        ext b
+        by_cases hba : b = a
+        · subst b
+          simp
+        · simp [Pi.single_eq_of_ne hba, Pi.smul_apply]
+      rw [hsingle, map_smul]
+      simp [smul_eq_mul]
+
+theorem covarianceBilinDual_eq_sum_gaussianCov
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ]
+    (L₁ L₂ : StrongDual ℝ (ι → ℝ)) :
+    covarianceBilinDual μ L₁ L₂ =
+      Finset.univ.sum fun i =>
+        Finset.univ.sum fun j =>
+          L₁ (Pi.single i 1) * L₂ (Pi.single j 1) * gaussianCov μ i j := by
+  classical
+  rw [covarianceBilinDual_eq_covariance (gaussian_memLp_id_two μ) L₁ L₂]
+  conv_lhs =>
+    arg 1
+    ext x
+    rw [continuousLinearMap_apply_eq_sum_single_scalar L₁ x]
+  conv_lhs =>
+    arg 2
+    ext x
+    rw [continuousLinearMap_apply_eq_sum_single_scalar L₂ x]
+  rw [covariance_fun_sum_fun_sum]
+  · refine Finset.sum_congr rfl fun i _ => ?_
+    refine Finset.sum_congr rfl fun j _ => ?_
+    rw [covariance_mul_const_left, covariance_mul_const_right]
+    rw [← gaussianCov_eq_covariance μ i j]
+    ring
+  · intro i
+    simpa [coordCLM, mul_comm] using
+      (IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)).const_mul (L₁ (Pi.single i 1))
+  · intro j
+    simpa [coordCLM, mul_comm] using
+      (IsGaussian.memLp_dual μ (coordCLM j) 2 (by simp)).const_mul (L₂ (Pi.single j 1))
+
+/-- Finite-dimensional Gaussian laws are determined by their coordinate means and coordinate
+covariance matrix. -/
+theorem gaussian_ext_of_coord_mean_cov
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ ν : Measure (ι → ℝ)) [IsGaussian μ] [IsGaussian ν]
+    (hmean : ∀ i, ∫ x, x i ∂μ = ∫ x, x i ∂ν)
+    (hcov : ∀ i j, gaussianCov μ i j = gaussianCov ν i j) :
+    μ = ν := by
+  classical
+  refine IsGaussian.ext_covarianceBilinDual ?_ ?_
+  · ext i
+    change (∫ x, x ∂μ) i = (∫ x, x ∂ν) i
+    have hμ_int : Integrable (id : (ι → ℝ) → (ι → ℝ)) μ :=
+      (gaussian_memLp_id_two μ).integrable (by norm_num)
+    have hν_int : Integrable (id : (ι → ℝ) → (ι → ℝ)) ν :=
+      (gaussian_memLp_id_two ν).integrable (by norm_num)
+    calc
+      (∫ x, x ∂μ) i = ∫ x, x i ∂μ := by
+        simpa [coordCLM, id] using
+          ((coordCLM i).integral_comp_comm hμ_int).symm
+      _ = ∫ x, x i ∂ν := hmean i
+      _ = (∫ x, x ∂ν) i := by
+        simpa [coordCLM, id] using
+          (coordCLM i).integral_comp_comm hν_int
+  · ext L₁ L₂
+    rw [covarianceBilinDual_eq_sum_gaussianCov μ L₁ L₂]
+    rw [covarianceBilinDual_eq_sum_gaussianCov ν L₁ L₂]
+    refine Finset.sum_congr rfl fun i _ => ?_
+    refine Finset.sum_congr rfl fun j _ => ?_
+    rw [hcov i j]
+
 theorem memLp_top_softmax_comp_linear
     {κ ι : Type*} [Fintype κ] [Fintype ι]
     (μ : Measure (κ → ℝ)) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (j : ι) :
@@ -704,6 +787,82 @@ theorem gaussianCov_map_linear_covFactor_of_matrix_factor
         rw [Finset.sum_apply, Finset.sum_apply]
         simp [Matrix.vecMulVec_apply]
   exact hentry'.symm
+
+/-- Coordinates of an independent centered Gaussian product have mean zero. -/
+theorem integral_pi_gaussianReal_centered_coord
+    {κ : Type*} [Fintype κ] [DecidableEq κ]
+    (v : κ → ℝ≥0) (a : κ) :
+    ∫ z, z a ∂(Measure.pi fun b => gaussianReal 0 (v b)) = 0 := by
+  classical
+  let μ : κ → Measure ℝ := fun b => gaussianReal 0 (v b)
+  have hmap : Measure.map (fun z : κ → ℝ => z a) (Measure.pi μ) = μ a :=
+    (measurePreserving_eval μ a).map_eq
+  calc
+    ∫ z, z a ∂(Measure.pi fun b => gaussianReal 0 (v b)) =
+        ∫ z, z a ∂(Measure.pi μ) := by rfl
+    _ = ∫ t, t ∂μ a := by
+      rw [← hmap]
+      rw [integral_map]
+      · exact (measurable_pi_apply a).aemeasurable
+      · exact aestronglyMeasurable_id
+    _ = 0 := by
+      simp [μ, integral_id_gaussianReal]
+
+/-- A linear image of an independent centered Gaussian product is coordinatewise centered. -/
+theorem integral_map_linear_pi_gaussianReal_centered_coord
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι]
+    (v : κ → ℝ≥0) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (i : ι) :
+    ∫ x, x i ∂((Measure.pi fun a => gaussianReal 0 (v a)).map L) = 0 := by
+  classical
+  let μ : Measure (κ → ℝ) := Measure.pi fun a => gaussianReal 0 (v a)
+  letI : IsGaussian μ := isGaussian_pi_gaussianReal_centered v
+  rw [integral_map]
+  · change ∫ z, L z i ∂μ = 0
+    rw [show (fun z : κ → ℝ => L z i) =
+        fun z => Finset.univ.sum fun a => z a * L (Pi.single a 1) i by
+      funext z
+      rw [continuousLinearMap_apply_eq_sum_single L z i]]
+    rw [integral_finset_sum]
+    · refine Finset.sum_eq_zero fun a _ => ?_
+      rw [integral_mul_const]
+      rw [integral_pi_gaussianReal_centered_coord v a]
+      simp
+    · intro a _
+      simpa [mul_comm] using
+        (gaussian_integrable_coord μ a).const_mul (L (Pi.single a 1) i)
+  · exact L.measurable.aemeasurable
+  · exact (measurable_pi_apply i).aestronglyMeasurable
+
+/-- Every centered finite-dimensional Gaussian has the same law as a finite linear image of an
+independent standard centered Gaussian product built from a Gram factor of its covariance matrix. -/
+theorem exists_linear_image_rep_of_centered_gaussian
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ]
+    (hμ0 : ∀ i, ∫ x, x i ∂μ = 0) :
+    ∃ (m : ℕ) (u : Fin m → ι → ℝ),
+      μ =
+        (Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)).map
+          (linearMapOfCovFactor u) := by
+  classical
+  rcases exists_gaussianCov_matrix_factor μ with ⟨m, u, hfac⟩
+  refine ⟨m, u, ?_⟩
+  let ν₀ : Measure (Fin m → ℝ) := Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)
+  let ν : Measure (ι → ℝ) := ν₀.map (linearMapOfCovFactor u)
+  letI : IsGaussian ν₀ := isGaussian_pi_gaussianReal_centered fun _ : Fin m => (1 : ℝ≥0)
+  letI : IsGaussian ν := isGaussian_map (linearMapOfCovFactor u)
+  change μ = ν
+  symm
+  refine gaussian_ext_of_coord_mean_cov ν μ ?_ ?_
+  · intro i
+    change ∫ x, x i ∂((Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)).map
+        (linearMapOfCovFactor u)) = ∫ x, x i ∂μ
+    rw [integral_map_linear_pi_gaussianReal_centered_coord]
+    exact (hμ0 i).symm
+  · intro i j
+    change gaussianCov
+        ((Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)).map
+          (linearMapOfCovFactor u)) i j = gaussianCov μ i j
+    exact gaussianCov_map_linear_covFactor_of_matrix_factor μ u hfac i j
 
 /-- One coordinate of a linear image after updating one source coordinate is affine in the updated
 scalar. -/
