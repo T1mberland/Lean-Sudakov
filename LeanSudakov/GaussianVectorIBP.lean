@@ -132,6 +132,114 @@ theorem gaussian_integrable_coord_mul_softmax
   integrable_coord_mul_softmax_of_integrable_coord
     (gaussian_integrable_coord μ i)
 
+/-- The first Gaussian density moment is integrable against Lebesgue measure. -/
+theorem integrable_gaussianPDFReal_mul_id
+    (m : ℝ) (v : ℝ≥0) :
+    Integrable (fun t : ℝ => gaussianPDFReal m v t * t) := by
+  by_cases hv : v = 0
+  · simp [hv, gaussianPDFReal_zero_var]
+  have hid : Integrable (fun t : ℝ => t) (gaussianReal m v) := by
+    simpa [id] using
+      (memLp_one_iff_integrable.mp
+        (memLp_id_gaussianReal' (μ := m) (v := v) 1 (by simp)))
+  rw [gaussianReal_of_var_ne_zero m hv] at hid
+  have h :=
+    (integrable_withDensity_iff_integrable_smul'
+      (μ := volume) (f := gaussianPDF m v) (g := fun t : ℝ => t)
+      (measurable_gaussianPDF m v)
+      (ae_of_all _ fun _ => gaussianPDF_lt_top)).1 hid
+  simpa [gaussianPDF, smul_eq_mul] using h
+
+private theorem memLp_top_softmax_update
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (β : ℝ) (x : ι → ℝ) (i j : ι) :
+    MemLp (fun t : ℝ => softmax β (Function.update x i t) j) ∞ volume := by
+  have hcont : Continuous fun t : ℝ => softmax β (Function.update x i t) j :=
+    (continuous_softmax β j).comp (continuous_const.update i continuous_id)
+  refine memLp_top_of_bound hcont.aestronglyMeasurable 1 ?_
+  exact ae_of_all _ fun t => by
+    simpa [Real.norm_eq_abs] using abs_softmax_le_one β (Function.update x i t) j
+
+private theorem memLp_top_softmax_deriv_update
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (β : ℝ) (x : ι → ℝ) (i j : ι) :
+    MemLp
+      (fun t : ℝ =>
+        β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+          softmax β (Function.update x i t) j *
+            softmax β (Function.update x i t) i))
+      ∞ volume := by
+  have hcont : Continuous fun t : ℝ =>
+      β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+        softmax β (Function.update x i t) j *
+          softmax β (Function.update x i t) i) :=
+    (continuous_softmax_deriv_term β j i).comp (continuous_const.update i continuous_id)
+  refine memLp_top_of_bound hcont.aestronglyMeasurable (|β| * 2) ?_
+  exact ae_of_all _ fun t => by
+    simpa [Real.norm_eq_abs] using
+      abs_softmax_deriv_term_le β (Function.update x i t) j i
+
+/-- One-dimensional Gaussian Stein identity for a softmax coordinate slice.
+
+This is the coordinate-wise analytic input supplied by the one-dimensional Gaussian integration by
+parts theorem. It does not yet assemble the full finite-dimensional arbitrary-covariance Stein
+identity. -/
+theorem gaussianReal_ibp_softmax_update
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    {v : ℝ≥0} (hv : v ≠ 0) (β : ℝ) (x : ι → ℝ) (i j : ι) :
+    ∫ t, t * softmax β (Function.update x i t) j ∂gaussianReal 0 v =
+      (v : ℝ) *
+        ∫ t,
+          β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+            softmax β (Function.update x i t) j *
+              softmax β (Function.update x i t) i) ∂gaussianReal 0 v := by
+  have hf : ∀ t : ℝ,
+      HasDerivAt (fun s : ℝ => softmax β (Function.update x i s) j)
+        (β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+          softmax β (Function.update x i t) j *
+            softmax β (Function.update x i t) i)) t := by
+    intro t
+    simpa using
+      (hasDerivAt_softmax_update β (Function.update x i t) j i)
+  have h_deriv :
+      Integrable
+        (fun t : ℝ =>
+          gaussianPDFReal 0 v t *
+            (β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+              softmax β (Function.update x i t) j *
+                softmax β (Function.update x i t) i))) := by
+    exact (integrable_gaussianPDFReal 0 v).mul_of_top_right
+      (memLp_top_softmax_deriv_update β x i j)
+  have h_center_base :
+      Integrable (fun t : ℝ => -(t - 0) / (v : ℝ) * gaussianPDFReal 0 v t) := by
+    have hv' : (v : ℝ) ≠ 0 := by exact_mod_cast hv
+    have h := (integrable_gaussianPDFReal_mul_id 0 v).const_mul (-(1 / (v : ℝ)))
+    convert h using 1
+    ext t
+    field_simp [hv']
+    ring
+  have h_center_deriv :
+      Integrable
+        (fun t : ℝ =>
+          (-(t - 0) / (v : ℝ) * gaussianPDFReal 0 v t) *
+            softmax β (Function.update x i t) j) := by
+    exact h_center_base.mul_of_top_right (memLp_top_softmax_update β x i j)
+  have h_prod :
+      Integrable
+        (fun t : ℝ => gaussianPDFReal 0 v t *
+          softmax β (Function.update x i t) j) := by
+    exact (integrable_gaussianPDFReal 0 v).mul_of_top_right
+      (memLp_top_softmax_update β x i j)
+  simpa using
+    (gaussianReal_integral_centered_mul_eq_var_mul_integral_deriv
+      (μ := 0) (v := v) hv
+      (f := fun t : ℝ => softmax β (Function.update x i t) j)
+      (f' := fun t : ℝ =>
+        β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+          softmax β (Function.update x i t) j *
+            softmax β (Function.update x i t) i))
+      hf h_deriv h_center_deriv h_prod)
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
