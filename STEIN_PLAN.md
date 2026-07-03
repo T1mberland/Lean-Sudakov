@@ -18,17 +18,17 @@ for centered finite-dimensional Gaussian `μ : Measure (ι → ℝ)`.
    - Add the degenerate `v = 0` case, so the scalar softmax-slice theorem has no `v ≠ 0`
      assumption.
 
-2. Prove the diagonal/product Gaussian Stein theorem. **In progress.**
+2. Prove the diagonal/product Gaussian Stein theorem. **Done.**
    - Work with `Measure.pi fun k => gaussianReal 0 (v k)`.
    - Done: register this product measure as Gaussian.
    - Done: prove its coordinate covariance matrix is diagonal with entries `(v k : ℝ)`.
-   - Next: prove a Bochner-valued coordinate Fubini lemma peeling off one coordinate from
-     `Measure.pi`. Mathlib's `lmarginal` API currently only handles `ℝ≥0∞` integrals.
+   - Done: prove a Bochner-valued coordinate Fubini lemma peeling off one coordinate from
+     `Measure.pi`.
    - Use Fubini / marginal integration to isolate the `k`-th coordinate.
    - Apply item 1 to the softmax slice.
    - Show off-diagonal covariance terms vanish and diagonal covariance is `(v k : ℝ)`.
 
-3. Prove the Gaussian linear-image transport lemma.
+3. Prove the Gaussian linear-image transport lemma. **Next.**
    - If `Z` satisfies the product theorem and `L : (κ → ℝ) →L[ℝ] (ι → ℝ)`, prove Stein
      for `μ = (Measure.pi fun k => gaussianReal 0 (v k)).map L`.
    - Use the chain rule for coordinate derivatives of `softmax β (L z)`.

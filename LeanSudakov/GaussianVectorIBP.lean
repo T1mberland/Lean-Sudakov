@@ -317,6 +317,119 @@ theorem gaussianCov_pi_gaussianReal_centered
     rw [hpair.covariance_eq_zero (hcoord_memLp i) (hcoord_memLp j)]
     simp [hij, μ]
 
+/-- Replacing one coordinate of an independent product sample by a fresh independent coordinate
+with the same law preserves the product measure. -/
+theorem map_update_prod_pi
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : ι → Measure ℝ) [∀ k, IsProbabilityMeasure (μ k)] (i : ι) :
+    Measure.map (fun p : (ι → ℝ) × ℝ => Function.update p.1 i p.2)
+        ((Measure.pi μ).prod (μ i)) =
+      Measure.pi μ := by
+  classical
+  have hmeas : Measurable fun p : (ι → ℝ) × ℝ => Function.update p.1 i p.2 :=
+    measurable_fst.update i measurable_snd
+  symm
+  refine Measure.pi_eq (μ := μ) fun s hs => ?_
+  rw [Measure.map_apply hmeas (MeasurableSet.univ_pi hs)]
+  have hpre :
+      (fun p : (ι → ℝ) × ℝ => Function.update p.1 i p.2) ⁻¹' Set.univ.pi s =
+        (Set.univ.pi (Function.update s i Set.univ)) ×ˢ s i := by
+    ext p
+    simp [Set.mem_pi, Function.update_apply]
+    constructor
+    · intro h
+      exact ⟨fun j _ => by
+        by_cases hji : j = i
+        · simp [hji]
+        · simpa [hji] using h j trivial, by simpa using h i trivial⟩
+    · rintro ⟨hx, ht⟩ j -
+      by_cases hji : j = i
+      · simpa [hji] using ht
+      · simpa [hji] using hx j trivial
+  rw [hpre, Measure.prod_prod, Measure.pi_pi]
+  · rw [Finset.prod_update_of_mem]
+    · simp [measure_univ]
+    · simp
+  · exact MeasurableSet.univ_pi fun j => by
+      by_cases hji : j = i
+      · subst j
+        simp
+      · simpa [Function.update, hji] using hs j
+  · exact hs i
+
+/-- Bochner-valued coordinate Fubini for a finite product probability measure. -/
+theorem integral_pi_update
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : ι → Measure ℝ) [∀ k, IsProbabilityMeasure (μ k)]
+    {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+    (i : ι) {f : (ι → ℝ) → E}
+    (hf : Integrable f (Measure.pi μ)) :
+    ∫ x, f x ∂Measure.pi μ =
+      ∫ x, ∫ t, f (Function.update x i t) ∂μ i ∂Measure.pi μ := by
+  have hmap := map_update_prod_pi μ i
+  rw [← hmap]
+  rw [integral_map]
+  · rw [integral_prod]
+    exact hf.comp_measurable (measurable_fst.update i measurable_snd)
+  · exact measurable_fst.update i measurable_snd
+  · exact hf.aestronglyMeasurable
+
+/-- Stein identity for softmax under an independent centered product Gaussian, in diagonal form. -/
+theorem gaussian_ibp_softmax_pi_diagonal
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ι → ℝ≥0) (β : ℝ) (i j : ι) :
+    ∫ x, x i * softmax β x j ∂(Measure.pi fun k => gaussianReal 0 (v k)) =
+      (v i : ℝ) *
+        ∫ x, β * ((if j = i then softmax β x j else 0) -
+          softmax β x j * softmax β x i)
+          ∂(Measure.pi fun k => gaussianReal 0 (v k)) := by
+  classical
+  let μ : ι → Measure ℝ := fun k => gaussianReal 0 (v k)
+  letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
+  let D : (ι → ℝ) → ℝ := fun x =>
+    β * ((if j = i then softmax β x j else 0) - softmax β x j * softmax β x i)
+  have hleft := integral_pi_update μ i
+    (f := fun x : ι → ℝ => x i * softmax β x j)
+    (gaussian_integrable_coord_mul_softmax (Measure.pi μ) β i j)
+  have hright := integral_pi_update μ i
+    (f := D)
+    (by simpa [D] using integrable_softmax_deriv_term (Measure.pi μ) β j i)
+  rw [hleft, hright]
+  calc
+    ∫ x : ι → ℝ, ∫ t, Function.update x i t i *
+        softmax β (Function.update x i t) j ∂μ i ∂Measure.pi μ
+        =
+      ∫ x : ι → ℝ, (v i : ℝ) *
+        ∫ t, D (Function.update x i t) ∂μ i ∂Measure.pi μ := by
+        refine integral_congr_ae ?_
+        exact ae_of_all _ fun x => by
+          simpa [μ, D] using gaussianReal_ibp_softmax_update_centered (v i) β x i j
+    _ = (v i : ℝ) * ∫ x : ι → ℝ, ∫ t, D (Function.update x i t) ∂μ i ∂Measure.pi μ := by
+      rw [integral_const_mul]
+
+/-- Stein identity for softmax under an independent centered product Gaussian, in covariance
+matrix form. -/
+theorem gaussian_ibp_softmax_pi
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ι → ℝ≥0) (β : ℝ) (i j : ι) :
+    ∫ x, x i * softmax β x j ∂(Measure.pi fun k => gaussianReal 0 (v k)) =
+      Finset.univ.sum fun k =>
+        gaussianCov (Measure.pi fun l => gaussianReal 0 (v l)) i k *
+          ∫ x, β * ((if j = k then softmax β x j else 0) -
+            softmax β x j * softmax β x k)
+            ∂(Measure.pi fun l => gaussianReal 0 (v l)) := by
+  classical
+  let μ : ι → Measure ℝ := fun k => gaussianReal 0 (v k)
+  letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
+  rw [gaussian_ibp_softmax_pi_diagonal v β i j]
+  symm
+  rw [Finset.sum_eq_single i]
+  · simp [gaussianCov_pi_gaussianReal_centered, μ]
+  · intro k _ hk
+    simp [gaussianCov_pi_gaussianReal_centered, hk.symm, μ]
+  · intro hi
+    exact (hi (Finset.mem_univ i)).elim
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
