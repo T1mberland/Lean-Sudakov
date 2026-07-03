@@ -1346,6 +1346,22 @@ theorem gaussian_ibp_softmax_of_linear_image_rep
   subst μ
   exact gaussian_ibp_softmax_map_linear_pi v β L i j
 
+/-- Softmax Stein identity for an arbitrary centered finite-dimensional Gaussian measure. -/
+theorem gaussian_ibp_softmax
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ]
+    (hμ0 : ∀ i, ∫ x, x i ∂μ = 0)
+    (β : ℝ) (i j : ι) :
+    ∫ x, x i * softmax β x j ∂μ =
+      Finset.univ.sum fun k =>
+        gaussianCov μ i k *
+          ∫ x, β * ((if j = k then softmax β x j else 0) -
+            softmax β x j * softmax β x k) ∂μ := by
+  classical
+  rcases exists_linear_image_rep_of_centered_gaussian μ hμ0 with ⟨m, u, hμ⟩
+  exact gaussian_ibp_softmax_of_linear_image_rep μ (fun _ : Fin m => (1 : ℝ≥0))
+    (linearMapOfCovFactor u) hμ β i j
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
