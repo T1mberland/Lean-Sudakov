@@ -938,6 +938,30 @@ theorem gaussian_ibp_softmax_linear_pi
   · intro ha
     exact (ha (Finset.mem_univ a)).elim
 
+/-- Transport the coordinate-softmax product integral across a linear image measure. -/
+theorem integral_map_linear_coord_mul_softmax
+    {κ ι : Type*} [Fintype κ] [Fintype ι]
+    (μ : Measure (κ → ℝ)) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) [IsGaussian (μ.map L)]
+    (i j : ι) :
+    ∫ x, x i * softmax β x j ∂(μ.map L) =
+      ∫ z, L z i * softmax β (L z) j ∂μ := by
+  rw [integral_map]
+  · exact L.continuous.aemeasurable
+  · exact (gaussian_integrable_coord_mul_softmax (μ.map L) β i j).aestronglyMeasurable
+
+/-- Transport one softmax Hessian entry integral across a linear image measure. -/
+theorem integral_map_linear_softmax_deriv_term
+    {κ ι : Type*} [Fintype κ] [Fintype ι] [DecidableEq ι]
+    (μ : Measure (κ → ℝ)) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ))
+    [IsFiniteMeasure (μ.map L)] (j k : ι) :
+    ∫ x, β * ((if j = k then softmax β x j else 0) -
+        softmax β x j * softmax β x k) ∂(μ.map L) =
+      ∫ z, β * ((if j = k then softmax β (L z) j else 0) -
+        softmax β (L z) j * softmax β (L z) k) ∂μ := by
+  rw [integral_map]
+  · exact L.continuous.aemeasurable
+  · exact (integrable_softmax_deriv_term (μ.map L) β j k).aestronglyMeasurable
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
