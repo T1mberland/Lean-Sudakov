@@ -534,6 +534,57 @@ theorem integrable_coord_mul_softmax_comp_linear_of_integrable_coord
     Integrable (fun z : κ → ℝ => z a * softmax β (L z) j) μ := by
   simpa [Pi.mul_apply] using ha.mul_of_top_left (memLp_top_softmax_comp_linear μ β L j)
 
+/-- Coordinate covariance of a linear image of an independent centered Gaussian product. -/
+theorem gaussianCov_map_linear_pi_gaussianReal_centered
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι]
+    (v : κ → ℝ≥0) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (i j : ι) :
+    gaussianCov ((Measure.pi fun a => gaussianReal 0 (v a)).map L) i j =
+      Finset.univ.sum fun a =>
+        (v a : ℝ) * L (Pi.single a 1) i * L (Pi.single a 1) j := by
+  classical
+  let μ : Measure (κ → ℝ) := Measure.pi fun a => gaussianReal 0 (v a)
+  letI : IsGaussian μ := isGaussian_pi_gaussianReal_centered v
+  letI : IsGaussian (μ.map L) := isGaussian_map L
+  have hmem (a : κ) : MemLp (fun z : κ → ℝ => z a) 2 μ := by
+    simpa [μ, coordCLM] using IsGaussian.memLp_dual μ (coordCLM a) 2 (by simp)
+  have hterm (c : κ → ℝ) (a : κ) :
+      MemLp (fun z : κ → ℝ => z a * c a) 2 μ := by
+    simpa [mul_comm] using (hmem a).const_mul (c a)
+  rw [gaussianCov_eq_covariance]
+  rw [covariance_map_fun
+    (measurable_pi_apply i).aestronglyMeasurable
+    (measurable_pi_apply j).aestronglyMeasurable
+    L.measurable.aemeasurable]
+  conv_lhs =>
+    arg 1
+    ext z
+    rw [continuousLinearMap_apply_eq_sum_single L z i]
+  conv_lhs =>
+    arg 2
+    ext z
+    rw [continuousLinearMap_apply_eq_sum_single L z j]
+  have hcov (a b : κ) :
+      cov[(fun z : κ → ℝ => z a), (fun z : κ → ℝ => z b); μ] =
+        if a = b then (v a : ℝ) else 0 := by
+    rw [← gaussianCov_eq_covariance μ a b]
+    simpa [μ] using gaussianCov_pi_gaussianReal_centered v a b
+  rw [covariance_fun_sum_fun_sum]
+  · simp_rw [covariance_mul_const_left, covariance_mul_const_right]
+    refine Finset.sum_congr rfl fun a _ => ?_
+    rw [Finset.sum_eq_single a]
+    · rw [hcov a a]
+      simp
+      ring
+    · intro b _ hb
+      rw [hcov a b]
+      simp [hb.symm]
+    · intro ha
+      exact (ha (Finset.mem_univ a)).elim
+  · intro a
+    exact hterm (fun a => L (Pi.single a 1) i) a
+  · intro a
+    exact hterm (fun a => L (Pi.single a 1) j) a
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
