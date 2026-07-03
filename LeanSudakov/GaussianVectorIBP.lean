@@ -754,6 +754,46 @@ private theorem memLp_top_softmax_linear_deriv_update
       _ = (Finset.univ.sum fun k : ι => |L (Pi.single a 1) k|) * (|β| * 2) := by
             rw [Finset.sum_mul]
 
+private theorem integrable_softmax_linear_deriv_sum
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι] [DecidableEq ι]
+    (μ : Measure (κ → ℝ)) [IsFiniteMeasure μ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (a : κ) (j : ι) :
+    Integrable
+      (fun z : κ → ℝ =>
+        Finset.univ.sum fun k : ι =>
+          L (Pi.single a 1) k *
+            (β * ((if j = k then softmax β (L z) j else 0) -
+              softmax β (L z) j * softmax β (L z) k)))
+      μ := by
+  have hcont : Continuous fun z : κ → ℝ =>
+      Finset.univ.sum fun k : ι =>
+        L (Pi.single a 1) k *
+          (β * ((if j = k then softmax β (L z) j else 0) -
+            softmax β (L z) j * softmax β (L z) k)) := by
+    refine continuous_finset_sum Finset.univ fun k _ => ?_
+    exact continuous_const.mul ((continuous_softmax_deriv_term β j k).comp L.continuous)
+  refine Integrable.of_bound hcont.aestronglyMeasurable
+    ((Finset.univ.sum fun k : ι => |L (Pi.single a 1) k|) * (|β| * 2)) ?_
+  exact ae_of_all _ fun z => by
+    simp only [Real.norm_eq_abs]
+    calc
+      |Finset.univ.sum fun k : ι =>
+          L (Pi.single a 1) k *
+            (β * ((if j = k then softmax β (L z) j else 0) -
+              softmax β (L z) j * softmax β (L z) k))|
+          ≤ Finset.univ.sum fun k : ι =>
+              |L (Pi.single a 1) k *
+                (β * ((if j = k then softmax β (L z) j else 0) -
+                  softmax β (L z) j * softmax β (L z) k))| := by
+            exact Finset.abs_sum_le_sum_abs _ _
+      _ ≤ Finset.univ.sum fun k : ι => |L (Pi.single a 1) k| * (|β| * 2) := by
+            refine Finset.sum_le_sum fun k _ => ?_
+            rw [abs_mul]
+            exact mul_le_mul_of_nonneg_left
+              (abs_softmax_deriv_term_le β (L z) j k) (abs_nonneg _)
+      _ = (Finset.univ.sum fun k : ι => |L (Pi.single a 1) k|) * (|β| * 2) := by
+            rw [Finset.sum_mul]
+
 /-- One-dimensional Gaussian Stein identity for a softmax coordinate after a linear map of the
 source coordinates. -/
 theorem gaussianReal_ibp_softmax_linear_update_centered
@@ -829,6 +869,74 @@ theorem gaussianReal_ibp_softmax_linear_update_centered
                 softmax β (L (Function.update z a t)) j *
                   softmax β (L (Function.update z a t)) k)))
         hf h_deriv h_center_deriv h_prod)
+
+/-- Stein identity for `softmax β (L z)` under an independent centered product Gaussian source,
+in diagonal source-coordinate form. -/
+theorem gaussian_ibp_softmax_linear_pi_diagonal
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι] [DecidableEq ι]
+    (v : κ → ℝ≥0) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (a : κ) (j : ι) :
+    ∫ z, z a * softmax β (L z) j ∂(Measure.pi fun b => gaussianReal 0 (v b)) =
+      (v a : ℝ) *
+        ∫ z,
+          Finset.univ.sum fun k : ι =>
+            L (Pi.single a 1) k *
+              (β * ((if j = k then softmax β (L z) j else 0) -
+                softmax β (L z) j * softmax β (L z) k))
+          ∂(Measure.pi fun b => gaussianReal 0 (v b)) := by
+  classical
+  let μ : κ → Measure ℝ := fun b => gaussianReal 0 (v b)
+  letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
+  let D : (κ → ℝ) → ℝ := fun z =>
+    Finset.univ.sum fun k : ι =>
+      L (Pi.single a 1) k *
+        (β * ((if j = k then softmax β (L z) j else 0) -
+          softmax β (L z) j * softmax β (L z) k))
+  have hleft := integral_pi_update μ a
+    (f := fun z : κ → ℝ => z a * softmax β (L z) j)
+    (integrable_coord_mul_softmax_comp_linear_of_integrable_coord
+      (gaussian_integrable_coord (Measure.pi μ) a))
+  have hright := integral_pi_update μ a
+    (f := D)
+    (by simpa [D] using integrable_softmax_linear_deriv_sum (Measure.pi μ) β L a j)
+  rw [hleft, hright]
+  calc
+    ∫ z : κ → ℝ, ∫ t, Function.update z a t a *
+        softmax β (L (Function.update z a t)) j ∂μ a ∂Measure.pi μ
+        =
+      ∫ z : κ → ℝ, (v a : ℝ) *
+        ∫ t, D (Function.update z a t) ∂μ a ∂Measure.pi μ := by
+        refine integral_congr_ae ?_
+        exact ae_of_all _ fun z => by
+          simpa [μ, D] using
+            gaussianReal_ibp_softmax_linear_update_centered (v a) β L z a j
+    _ = (v a : ℝ) * ∫ z : κ → ℝ, ∫ t, D (Function.update z a t) ∂μ a ∂Measure.pi μ := by
+      rw [integral_const_mul]
+
+/-- Stein identity for `softmax β (L z)` under an independent centered product Gaussian source,
+in source covariance-matrix form. -/
+theorem gaussian_ibp_softmax_linear_pi
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι] [DecidableEq ι]
+    (v : κ → ℝ≥0) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (a : κ) (j : ι) :
+    ∫ z, z a * softmax β (L z) j ∂(Measure.pi fun b => gaussianReal 0 (v b)) =
+      Finset.univ.sum fun b =>
+        gaussianCov (Measure.pi fun c => gaussianReal 0 (v c)) a b *
+          ∫ z,
+            Finset.univ.sum fun k : ι =>
+              L (Pi.single b 1) k *
+                (β * ((if j = k then softmax β (L z) j else 0) -
+                  softmax β (L z) j * softmax β (L z) k))
+            ∂(Measure.pi fun c => gaussianReal 0 (v c)) := by
+  classical
+  let μ : κ → Measure ℝ := fun b => gaussianReal 0 (v b)
+  letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
+  rw [gaussian_ibp_softmax_linear_pi_diagonal v β L a j]
+  symm
+  rw [Finset.sum_eq_single a]
+  · simp [gaussianCov_pi_gaussianReal_centered]
+  · intro b _ hb
+    simp [gaussianCov_pi_gaussianReal_centered, hb.symm]
+  · intro ha
+    exact (ha (Finset.mem_univ a)).elim
 
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
