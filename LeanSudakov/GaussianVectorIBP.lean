@@ -5,9 +5,11 @@ import Mathlib.MeasureTheory.Function.SpecialFunctions.Basic
 import Mathlib.MeasureTheory.Order.Lattice
 import Mathlib.MeasureTheory.SpecificCodomains.Pi
 import Mathlib.Probability.Distributions.Gaussian.Basic
+import Mathlib.Probability.Distributions.Gaussian.CharFun
 import Mathlib.Probability.Distributions.Gaussian.HasGaussianLaw.Independence
 import Mathlib.Probability.Moments.CovarianceBilinDual
 import Mathlib.Probability.Moments.Variance
+import Mathlib.Analysis.InnerProductSpace.Positive
 import Mathlib.LinearAlgebra.Pi
 
 open MeasureTheory ProbabilityTheory
@@ -157,6 +159,82 @@ theorem gaussianCov_eq_covariance
     gaussianCov μ i j = cov[(fun x : ι → ℝ => x i), (fun x : ι → ℝ => x j); μ] := by
   rw [gaussianCov]
   exact covarianceBilinDual_eq_covariance (gaussian_memLp_id_two μ) (coordCLM i) (coordCLM j)
+
+/-- The coordinate covariance matrix of a finite-dimensional Gaussian measure is positive
+semidefinite. -/
+theorem gaussianCov_matrix_posSemidef
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] :
+    (Matrix.of fun i j => gaussianCov μ i j).PosSemidef := by
+  classical
+  refine Matrix.PosSemidef.of_dotProduct_mulVec_nonneg ?_ ?_
+  · ext i j
+    simp [gaussianCov_eq_covariance, covariance_comm]
+  · intro x
+    let L : (ι → ℝ) →L[ℝ] ℝ := Finset.univ.sum fun i : ι => x i • coordCLM i
+    have hmem : MemLp (fun y : ι → ℝ => L y) 2 μ := by
+      simpa using IsGaussian.memLp_dual μ L 2 (by simp)
+    have hnonneg : 0 ≤ cov[(fun y : ι → ℝ => L y), (fun y : ι → ℝ => L y); μ] := by
+      rw [covariance_self hmem.aemeasurable]
+      exact variance_nonneg _ _
+    have hcov :
+        cov[(fun y : ι → ℝ => L y), (fun y : ι → ℝ => L y); μ] =
+          dotProduct (star x) (Matrix.mulVec (Matrix.of fun i j => gaussianCov μ i j) x) := by
+      rw [show (fun y : ι → ℝ => L y) =
+          fun y => Finset.univ.sum fun i => x i * y i by
+        funext y
+        simp [L, coordCLM, Finset.sum_apply]]
+      rw [covariance_fun_sum_fun_sum]
+      · simp [dotProduct, Matrix.mulVec, gaussianCov_eq_covariance,
+          covariance_const_mul_left, covariance_const_mul_right]
+        refine Finset.sum_congr rfl fun i _ => ?_
+        rw [Finset.mul_sum]
+        refine Finset.sum_congr rfl fun j _ => ?_
+        ring
+      · intro i
+        simpa [coordCLM] using
+          (IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)).const_mul (x i)
+      · intro i
+        simpa [coordCLM] using
+          (IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)).const_mul (x i)
+    simpa [hcov] using hnonneg
+
+/-- The coordinate covariance matrix of a finite-dimensional Gaussian measure admits a finite
+Gram factorization. -/
+theorem exists_gaussianCov_matrix_factor
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] :
+    ∃ (m : ℕ) (u : Fin m → ι → ℝ),
+      (Matrix.of fun i j => gaussianCov μ i j) =
+        ∑ a : Fin m, Matrix.vecMulVec (u a) (star (u a)) :=
+  Matrix.posSemidef_iff_eq_sum_vecMulVec.mp (gaussianCov_matrix_posSemidef μ)
+
+/-- The linear map associated to a finite Gram factorization of a covariance matrix. -/
+noncomputable def linearMapOfCovFactor
+    {ι : Type*} [Fintype ι] {m : ℕ}
+    (u : Fin m → ι → ℝ) : (Fin m → ℝ) →L[ℝ] (ι → ℝ) :=
+  ContinuousLinearMap.pi fun i =>
+    Finset.univ.sum fun a : Fin m => u a i • coordCLM a
+
+@[simp]
+theorem linearMapOfCovFactor_apply
+    {ι : Type*} [Fintype ι] {m : ℕ}
+    (u : Fin m → ι → ℝ) (z : Fin m → ℝ) (i : ι) :
+    linearMapOfCovFactor u z i = Finset.univ.sum fun a : Fin m => z a * u a i := by
+  simp [linearMapOfCovFactor, coordCLM, Finset.sum_apply, mul_comm]
+
+@[simp]
+theorem linearMapOfCovFactor_single
+    {ι : Type*} [Fintype ι] {m : ℕ}
+    (u : Fin m → ι → ℝ) (a : Fin m) (i : ι) :
+    linearMapOfCovFactor u (Pi.single a 1) i = u a i := by
+  rw [linearMapOfCovFactor_apply]
+  rw [Finset.sum_eq_single a]
+  · simp
+  · intro b _ hb
+    simp [Pi.single_eq_of_ne hb]
+  · intro ha
+    exact (ha (Finset.mem_univ a)).elim
 
 /-- The first Gaussian density moment is integrable against Lebesgue measure. -/
 theorem integrable_gaussianPDFReal_mul_id
@@ -584,6 +662,48 @@ theorem gaussianCov_map_linear_pi_gaussianReal_centered
     exact hterm (fun a => L (Pi.single a 1) i) a
   · intro a
     exact hterm (fun a => L (Pi.single a 1) j) a
+
+/-- The linear Gaussian image built from a Gram factor has the corresponding Gram covariance. -/
+theorem gaussianCov_map_linear_covFactor
+    {ι : Type*} [Fintype ι] [DecidableEq ι] {m : ℕ}
+    (u : Fin m → ι → ℝ) (i j : ι) :
+    gaussianCov
+        ((Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)).map
+          (linearMapOfCovFactor u)) i j =
+      Finset.univ.sum fun a : Fin m => u a i * u a j := by
+  classical
+  rw [gaussianCov_map_linear_pi_gaussianReal_centered]
+  refine Finset.sum_congr rfl fun a _ => ?_
+  rw [linearMapOfCovFactor_single, linearMapOfCovFactor_single]
+  norm_num
+
+/-- Applying a covariance Gram factorization to a centered product Gaussian realizes the target
+coordinate covariance matrix. -/
+theorem gaussianCov_map_linear_covFactor_of_matrix_factor
+    {ι : Type*} [Fintype ι] [DecidableEq ι] {m : ℕ}
+    (μ : Measure (ι → ℝ)) [IsGaussian μ]
+    (u : Fin m → ι → ℝ)
+    (hfac :
+      (Matrix.of fun i j => gaussianCov μ i j) =
+        ∑ a : Fin m, Matrix.vecMulVec (u a) (star (u a))) :
+    ∀ i j,
+      gaussianCov
+          ((Measure.pi fun _ : Fin m => gaussianReal 0 (1 : ℝ≥0)).map
+            (linearMapOfCovFactor u)) i j =
+        gaussianCov μ i j := by
+  intro i j
+  rw [gaussianCov_map_linear_covFactor]
+  have hentry := congr_fun (congr_fun hfac i) j
+  have hentry' :
+      gaussianCov μ i j =
+        Finset.univ.sum fun a : Fin m => u a i * u a j := by
+    calc
+      gaussianCov μ i j =
+          (Finset.univ.sum fun a : Fin m => Matrix.vecMulVec (u a) (star (u a))) i j := hentry
+      _ = Finset.univ.sum fun a : Fin m => u a i * u a j := by
+        rw [Finset.sum_apply, Finset.sum_apply]
+        simp [Matrix.vecMulVec_apply]
+  exact hentry'.symm
 
 /-- One coordinate of a linear image after updating one source coordinate is affine in the updated
 scalar. -/
