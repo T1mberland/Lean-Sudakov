@@ -95,18 +95,23 @@ def softmax {ι : Type*} [Fintype ι]
   Real.exp (β * x i) /
     ((Finset.univ).sum fun k => Real.exp (β * x k))
 
+theorem softmax_den_pos
+    {ι : Type*} [Fintype ι]
+    (β : ℝ) (x : ι → ℝ) (i : ι) :
+    0 < (Finset.univ).sum fun k => Real.exp (β * x k) :=
+  lt_of_lt_of_le (Real.exp_pos (β * x i)) <|
+    Finset.single_le_sum
+      (s := (Finset.univ : Finset ι))
+      (f := fun k => Real.exp (β * x k))
+      (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i)
+
 theorem sum_softmax
     {ι : Type*} [Fintype ι] [Nonempty ι]
     (β : ℝ) (x : ι → ℝ) :
     (Finset.univ.sum fun i => softmax β x i) = 1 := by
   let S : ℝ := (Finset.univ).sum fun k => Real.exp (β * x k)
-  have hSpos : 0 < S := by
-    obtain ⟨i₀⟩ := ‹Nonempty ι›
-    exact lt_of_lt_of_le (Real.exp_pos (β * x i₀)) <|
-      Finset.single_le_sum
-        (s := (Finset.univ : Finset ι))
-        (f := fun i => Real.exp (β * x i))
-        (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i₀)
+  obtain ⟨i₀⟩ := ‹Nonempty ι›
+  have hSpos : 0 < S := by simpa [S] using softmax_den_pos β x i₀
   calc
     (Finset.univ.sum fun i => softmax β x i)
         = ((Finset.univ).sum fun i => Real.exp (β * x i)) / S := by
@@ -120,12 +125,30 @@ theorem softmax_nonneg
     0 ≤ softmax β x i := by
   have hden_pos :
       0 < (Finset.univ).sum fun k => Real.exp (β * x k) :=
-    lt_of_lt_of_le (Real.exp_pos (β * x i)) <|
-      Finset.single_le_sum
-        (s := (Finset.univ : Finset ι))
-        (f := fun k => Real.exp (β * x k))
-        (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i)
+    softmax_den_pos β x i
   exact div_nonneg (Real.exp_nonneg _) hden_pos.le
+
+theorem softmax_le_one
+    {ι : Type*} [Fintype ι]
+    (β : ℝ) (x : ι → ℝ) (i : ι) :
+    softmax β x i ≤ 1 := by
+  have hden_pos :
+      0 < (Finset.univ).sum fun k => Real.exp (β * x k) :=
+    softmax_den_pos β x i
+  have hnum_le :
+      Real.exp (β * x i) ≤ (Finset.univ).sum fun k => Real.exp (β * x k) :=
+    Finset.single_le_sum
+      (s := (Finset.univ : Finset ι))
+      (f := fun k => Real.exp (β * x k))
+      (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i)
+  rw [softmax]
+  exact (div_le_one hden_pos).2 hnum_le
+
+theorem abs_softmax_le_one
+    {ι : Type*} [Fintype ι]
+    (β : ℝ) (x : ι → ℝ) (i : ι) :
+    |softmax β x i| ≤ 1 := by
+  exact abs_le.2 ⟨by linarith [softmax_nonneg β x i], softmax_le_one β x i⟩
 
 theorem hessian_cov_rewrite
     {ι : Type*} [Fintype ι] [DecidableEq ι]
