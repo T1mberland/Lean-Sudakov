@@ -585,6 +585,251 @@ theorem gaussianCov_map_linear_pi_gaussianReal_centered
   · intro a
     exact hterm (fun a => L (Pi.single a 1) j) a
 
+/-- One coordinate of a linear image after updating one source coordinate is affine in the updated
+scalar. -/
+theorem continuousLinearMap_update_apply
+    {κ ι : Type*} [DecidableEq κ]
+    (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (k : ι) (t : ℝ) :
+    L (Function.update z a t) k =
+      L z k + (t - z a) * L (Pi.single a 1) k := by
+  have hdiff : Function.update z a t = z + (t - z a) • (Pi.single a (1 : ℝ) : κ → ℝ) := by
+    ext b
+    by_cases hba : b = a
+    · subst b
+      simp [Pi.add_apply, Pi.smul_apply]
+    · simp [Function.update, hba, Pi.add_apply, Pi.smul_apply]
+  rw [hdiff, map_add, map_smul]
+  simp [Pi.add_apply, smul_eq_mul]
+
+private theorem hasDerivAt_linear_image_update_coord
+    {κ ι : Type*} [DecidableEq κ]
+    (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (k : ι) :
+    HasDerivAt (fun t : ℝ => L (Function.update z a t) k)
+      (L (Pi.single a 1) k) (z a) := by
+  have hbase :
+      HasDerivAt (fun t : ℝ => L z k + (t - z a) * L (Pi.single a 1) k)
+        (L (Pi.single a 1) k) (z a) := by
+    simpa [mul_comm] using
+      ((hasDerivAt_id (z a)).sub_const (z a)
+        |>.mul_const (L (Pi.single a 1) k)
+        |>.const_add (L z k))
+  convert hbase using 1
+  ext t
+  rw [continuousLinearMap_update_apply L z a k t]
+
+private theorem hasDerivAt_exp_linear_image_update
+    {κ ι : Type*} [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (k : ι) :
+    HasDerivAt (fun t : ℝ => Real.exp (β * L (Function.update z a t) k))
+      (β * L (Pi.single a 1) k * Real.exp (β * L z k)) (z a) := by
+  have hlin := (hasDerivAt_linear_image_update_coord L z a k).const_mul β
+  convert hlin.exp using 1
+  · rw [Function.update_eq_self]
+    ring
+
+private theorem hasDerivAt_expSum_linear_image_update
+    {κ ι : Type*} [Fintype ι] [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) :
+    HasDerivAt
+      (fun t : ℝ => Finset.univ.sum fun k : ι =>
+        Real.exp (β * L (Function.update z a t) k))
+      (Finset.univ.sum fun k : ι =>
+        β * L (Pi.single a 1) k * Real.exp (β * L z k)) (z a) := by
+  exact HasDerivAt.fun_sum (u := (Finset.univ : Finset ι))
+    fun k _ => hasDerivAt_exp_linear_image_update β L z a k
+
+/-- Chain rule for differentiating `softmax β (L z)` in one source coordinate. -/
+theorem hasDerivAt_softmax_linear_update
+    {κ ι : Type*} [Fintype ι] [DecidableEq ι] [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (j : ι) :
+    HasDerivAt (fun t : ℝ => softmax β (L (Function.update z a t)) j)
+      (Finset.univ.sum fun k : ι =>
+        L (Pi.single a 1) k *
+          (β * ((if j = k then softmax β (L z) j else 0) -
+            softmax β (L z) j * softmax β (L z) k))) (z a) := by
+  let S : ℝ := Finset.univ.sum fun k : ι => Real.exp (β * L z k)
+  have hSpos : 0 < S := by
+    exact lt_of_lt_of_le (Real.exp_pos (β * L z j)) <|
+      Finset.single_le_sum
+        (s := (Finset.univ : Finset ι))
+        (f := fun k => Real.exp (β * L z k))
+        (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ j)
+  have hden_ne :
+      (Finset.univ.sum fun k : ι => Real.exp (β * L (Function.update z a (z a)) k)) ≠ 0 := by
+    simpa [Function.update_eq_self, S] using hSpos.ne'
+  have hsum_ne : (Finset.univ.sum fun k : ι => Real.exp (β * L z k)) ≠ 0 := by
+    simpa [S] using hSpos.ne'
+  have hβsum :
+      (Finset.univ.sum fun k : ι => β * Real.exp (β * L z k)) =
+        β * (Finset.univ.sum fun k : ι => Real.exp (β * L z k)) := by
+    rw [Finset.mul_sum]
+  have hquot := (hasDerivAt_exp_linear_image_update β L z a j).div
+    (hasDerivAt_expSum_linear_image_update β L z a) hden_ne
+  convert hquot using 1
+  · simp [Function.update_eq_self, softmax]
+    field_simp [hsum_ne]
+    ring_nf
+    simp_rw [Finset.mul_sum]
+    field_simp [hsum_ne]
+    simp_rw [mul_sub]
+    rw [Finset.sum_sub_distrib]
+    congr 1
+    · rw [Finset.sum_eq_single j]
+      · rw [hβsum]
+        field_simp [hsum_ne]
+        simp
+        field_simp [hsum_ne]
+      · intro k _ hkj
+        simp [hkj.symm]
+      · intro hj
+        exact (hj (Finset.mem_univ j)).elim
+    · refine Finset.sum_congr rfl fun k _ => ?_
+      ring
+
+theorem deriv_softmax_linear_update
+    {κ ι : Type*} [Fintype ι] [DecidableEq ι] [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (j : ι) :
+    deriv (fun t : ℝ => softmax β (L (Function.update z a t)) j) (z a) =
+      Finset.univ.sum fun k : ι =>
+        L (Pi.single a 1) k *
+          (β * ((if j = k then softmax β (L z) j else 0) -
+            softmax β (L z) j * softmax β (L z) k)) :=
+  (hasDerivAt_softmax_linear_update β L z a j).deriv
+
+private theorem memLp_top_softmax_linear_update
+    {κ ι : Type*} [Fintype ι] [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (j : ι) :
+    MemLp (fun t : ℝ => softmax β (L (Function.update z a t)) j) ∞ volume := by
+  have hcont :
+      Continuous fun t : ℝ => softmax β (L (Function.update z a t)) j :=
+    (continuous_softmax β j).comp
+      (L.continuous.comp (continuous_const.update a continuous_id))
+  refine memLp_top_of_bound hcont.aestronglyMeasurable 1 ?_
+  exact ae_of_all _ fun t => by
+    simpa [Real.norm_eq_abs] using abs_softmax_le_one β (L (Function.update z a t)) j
+
+private theorem memLp_top_softmax_linear_deriv_update
+    {κ ι : Type*} [Fintype ι] [DecidableEq ι] [DecidableEq κ]
+    (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (j : ι) :
+    MemLp
+      (fun t : ℝ =>
+        Finset.univ.sum fun k : ι =>
+          L (Pi.single a 1) k *
+            (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+              softmax β (L (Function.update z a t)) j *
+                softmax β (L (Function.update z a t)) k)))
+      ∞ volume := by
+  have hcont : Continuous fun t : ℝ =>
+      Finset.univ.sum fun k : ι =>
+        L (Pi.single a 1) k *
+          (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+            softmax β (L (Function.update z a t)) j *
+              softmax β (L (Function.update z a t)) k)) := by
+    refine continuous_finset_sum Finset.univ fun k _ => ?_
+    exact continuous_const.mul
+      ((continuous_softmax_deriv_term β j k).comp
+        (L.continuous.comp (continuous_const.update a continuous_id)))
+  refine memLp_top_of_bound hcont.aestronglyMeasurable
+    ((Finset.univ.sum fun k : ι => |L (Pi.single a 1) k|) * (|β| * 2)) ?_
+  exact ae_of_all _ fun t => by
+    simp only [Real.norm_eq_abs]
+    calc
+      |Finset.univ.sum fun k : ι =>
+          L (Pi.single a 1) k *
+            (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+              softmax β (L (Function.update z a t)) j *
+                softmax β (L (Function.update z a t)) k))|
+          ≤ Finset.univ.sum fun k : ι =>
+              |L (Pi.single a 1) k *
+                (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+                  softmax β (L (Function.update z a t)) j *
+                    softmax β (L (Function.update z a t)) k))| := by
+            exact Finset.abs_sum_le_sum_abs _ _
+      _ ≤ Finset.univ.sum fun k : ι => |L (Pi.single a 1) k| * (|β| * 2) := by
+            refine Finset.sum_le_sum fun k _ => ?_
+            rw [abs_mul]
+            exact mul_le_mul_of_nonneg_left
+              (abs_softmax_deriv_term_le β (L (Function.update z a t)) j k)
+              (abs_nonneg _)
+      _ = (Finset.univ.sum fun k : ι => |L (Pi.single a 1) k|) * (|β| * 2) := by
+            rw [Finset.sum_mul]
+
+/-- One-dimensional Gaussian Stein identity for a softmax coordinate after a linear map of the
+source coordinates. -/
+theorem gaussianReal_ibp_softmax_linear_update_centered
+    {κ ι : Type*} [Fintype ι] [DecidableEq ι] [DecidableEq κ]
+    (v : ℝ≥0) (β : ℝ) (L : (κ → ℝ) →L[ℝ] (ι → ℝ)) (z : κ → ℝ) (a : κ) (j : ι) :
+    ∫ t, t * softmax β (L (Function.update z a t)) j ∂gaussianReal 0 v =
+      (v : ℝ) *
+        ∫ t,
+          Finset.univ.sum fun k : ι =>
+            L (Pi.single a 1) k *
+              (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+                softmax β (L (Function.update z a t)) j *
+                  softmax β (L (Function.update z a t)) k)) ∂gaussianReal 0 v := by
+  by_cases hv : v = 0
+  · subst v
+    simp
+  · have hf : ∀ t : ℝ,
+        HasDerivAt (fun s : ℝ => softmax β (L (Function.update z a s)) j)
+          (Finset.univ.sum fun k : ι =>
+            L (Pi.single a 1) k *
+              (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+                softmax β (L (Function.update z a t)) j *
+                  softmax β (L (Function.update z a t)) k))) t := by
+      intro t
+      simpa using hasDerivAt_softmax_linear_update β L (Function.update z a t) a j
+    have h_deriv :
+        Integrable
+          (fun t : ℝ =>
+            gaussianPDFReal 0 v t *
+              (Finset.univ.sum fun k : ι =>
+                L (Pi.single a 1) k *
+                  (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+                    softmax β (L (Function.update z a t)) j *
+                      softmax β (L (Function.update z a t)) k)))) := by
+      convert (integrable_gaussianPDFReal 0 v).mul_of_top_right
+        (memLp_top_softmax_linear_deriv_update β L z a j) using 1
+      ext t
+      rw [mul_comm]
+      simp
+    have h_center_base :
+        Integrable (fun t : ℝ => -(t - 0) / (v : ℝ) * gaussianPDFReal 0 v t) := by
+      have hv' : (v : ℝ) ≠ 0 := by exact_mod_cast hv
+      have h := (integrable_gaussianPDFReal_mul_id 0 v).const_mul (-(1 / (v : ℝ)))
+      convert h using 1
+      ext t
+      field_simp [hv']
+      ring
+    have h_center_deriv :
+        Integrable
+          (fun t : ℝ =>
+            (-(t - 0) / (v : ℝ) * gaussianPDFReal 0 v t) *
+              softmax β (L (Function.update z a t)) j) := by
+      convert h_center_base.mul_of_top_right
+        (memLp_top_softmax_linear_update β L z a j) using 1
+      ext t
+      simp [Pi.mul_apply]
+      ring
+    have h_prod :
+        Integrable
+          (fun t : ℝ => gaussianPDFReal 0 v t *
+            softmax β (L (Function.update z a t)) j) := by
+      simpa only [Pi.mul_apply, mul_comm] using
+        (integrable_gaussianPDFReal 0 v).mul_of_top_right
+          (memLp_top_softmax_linear_update β L z a j)
+    simpa using
+      (gaussianReal_integral_centered_mul_eq_var_mul_integral_deriv
+        (μ := 0) (v := v) hv
+        (f := fun t : ℝ => softmax β (L (Function.update z a t)) j)
+        (f' := fun t : ℝ =>
+          Finset.univ.sum fun k : ι =>
+            L (Pi.single a 1) k *
+              (β * ((if j = k then softmax β (L (Function.update z a t)) j else 0) -
+                softmax β (L (Function.update z a t)) j *
+                  softmax β (L (Function.update z a t)) k)))
+        hf h_deriv h_center_deriv h_prod)
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
