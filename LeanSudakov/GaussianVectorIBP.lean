@@ -1048,6 +1048,25 @@ theorem gaussian_ibp_softmax_map_linear_pi
           refine Finset.sum_congr rfl fun k _ => ?_
           rw [integral_map_linear_softmax_deriv_term μ β L j k]
 
+/-- Softmax Stein identity for any measure supplied with an explicit representation as a linear
+image of an independent centered product Gaussian.
+
+The remaining structural Gaussian work is to prove that every centered finite-dimensional Gaussian
+measure admits such a representation, with a suitable finite source type and linear map. -/
+theorem gaussian_ibp_softmax_of_linear_image_rep
+    {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) (v : κ → ℝ≥0)
+    (L : (κ → ℝ) →L[ℝ] (ι → ℝ))
+    (hμ : μ = (Measure.pi fun a => gaussianReal 0 (v a)).map L)
+    (β : ℝ) (i j : ι) :
+    ∫ x, x i * softmax β x j ∂μ =
+      Finset.univ.sum fun k =>
+        gaussianCov μ i k *
+          ∫ x, β * ((if j = k then softmax β x j else 0) -
+            softmax β x j * softmax β x k) ∂μ := by
+  subst μ
+  exact gaussian_ibp_softmax_map_linear_pi v β L i j
+
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
     Measurable fun x : ι → ℝ => vecMax x := by
