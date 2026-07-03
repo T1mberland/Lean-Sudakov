@@ -5,6 +5,7 @@ import Mathlib.MeasureTheory.Function.SpecialFunctions.Basic
 import Mathlib.MeasureTheory.Order.Lattice
 import Mathlib.MeasureTheory.SpecificCodomains.Pi
 import Mathlib.Probability.Distributions.Gaussian.Basic
+import Mathlib.Probability.Distributions.Gaussian.HasGaussianLaw.Independence
 import Mathlib.Probability.Moments.CovarianceBilinDual
 import Mathlib.Probability.Moments.Variance
 
@@ -239,6 +240,82 @@ theorem gaussianReal_ibp_softmax_update
           softmax β (Function.update x i t) j *
             softmax β (Function.update x i t) i))
       hf h_deriv h_center_deriv h_prod)
+
+/-- Centered one-dimensional Gaussian Stein identity for a softmax coordinate slice, including the
+degenerate variance case. -/
+theorem gaussianReal_ibp_softmax_update_centered
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ℝ≥0) (β : ℝ) (x : ι → ℝ) (i j : ι) :
+    ∫ t, t * softmax β (Function.update x i t) j ∂gaussianReal 0 v =
+      (v : ℝ) *
+        ∫ t,
+          β * ((if j = i then softmax β (Function.update x i t) j else 0) -
+            softmax β (Function.update x i t) j *
+              softmax β (Function.update x i t) i) ∂gaussianReal 0 v := by
+  by_cases hv : v = 0
+  · subst v
+    simp
+  · exact gaussianReal_ibp_softmax_update hv β x i j
+
+/-- The product of centered one-dimensional Gaussian measures is Gaussian. -/
+theorem isGaussian_pi_gaussianReal_centered
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ι → ℝ≥0) :
+    IsGaussian (Measure.pi fun i => gaussianReal 0 (v i)) := by
+  classical
+  let μ : ι → Measure ℝ := fun i => gaussianReal 0 (v i)
+  have hcoord : ∀ i, HasGaussianLaw (fun x : ι → ℝ => x i) (Measure.pi μ) := by
+    intro i
+    exact HasLaw.hasGaussianLaw
+      (MeasurePreserving.hasLaw (measurePreserving_eval μ i))
+  have hindep : iIndepFun (fun i (x : ι → ℝ) => x i) (Measure.pi μ) := by
+    simpa [μ] using
+      (iIndepFun_pi (μ := μ) (X := fun _ : ι => id)
+        (fun _ => measurable_id.aemeasurable))
+  have hjoint := iIndepFun.hasGaussianLaw hcoord hindep
+  simpa [μ, Function.comp_def] using hjoint.isGaussian_map
+
+/-- Coordinates of the centered product Gaussian have the prescribed variances. -/
+theorem variance_pi_gaussianReal_centered_coord
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ι → ℝ≥0) (i : ι) :
+    variance (fun x : ι → ℝ => x i) (Measure.pi fun k => gaussianReal 0 (v k)) =
+      (v i : ℝ) := by
+  let μ : ι → Measure ℝ := fun k => gaussianReal 0 (v k)
+  have hmp : MeasurePreserving (Function.eval i) (Measure.pi μ) (μ i) :=
+    measurePreserving_eval μ i
+  rw [hmp.variance_fun_comp (f := id) measurable_id.aemeasurable]
+  simp [μ]
+
+/-- Coordinate covariance matrix of an independent centered Gaussian product measure. -/
+theorem gaussianCov_pi_gaussianReal_centered
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (v : ι → ℝ≥0) (i j : ι) :
+    letI : IsGaussian (Measure.pi fun k => gaussianReal 0 (v k)) :=
+      isGaussian_pi_gaussianReal_centered v
+    gaussianCov (Measure.pi fun k => gaussianReal 0 (v k)) i j =
+      if i = j then (v i : ℝ) else 0 := by
+  classical
+  let μ : ι → Measure ℝ := fun k => gaussianReal 0 (v k)
+  letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
+  have hcoord_memLp (k : ι) :
+      MemLp (fun x : ι → ℝ => x k) 2 (Measure.pi μ) := by
+    simpa [μ, coordCLM] using
+      IsGaussian.memLp_dual (Measure.pi μ) (coordCLM k) 2 (by simp)
+  by_cases hij : i = j
+  · subst j
+    rw [gaussianCov_eq_covariance]
+    rw [covariance_self (hcoord_memLp i).aemeasurable]
+    simp [variance_pi_gaussianReal_centered_coord, μ]
+  · rw [gaussianCov_eq_covariance]
+    have hindep : iIndepFun (fun k (x : ι → ℝ) => x k) (Measure.pi μ) := by
+      simpa [μ] using
+        (iIndepFun_pi (μ := μ) (X := fun _ : ι => id)
+          (fun _ => measurable_id.aemeasurable))
+    have hpair : (fun x : ι → ℝ => x i) ⟂ᵢ[Measure.pi μ] (fun x : ι → ℝ => x j) :=
+      hindep.indepFun hij
+    rw [hpair.covariance_eq_zero (hcoord_memLp i) (hcoord_memLp j)]
+    simp [hij, μ]
 
 theorem measurable_vecMax
     {ι : Type*} [Fintype ι] [Nonempty ι] :
