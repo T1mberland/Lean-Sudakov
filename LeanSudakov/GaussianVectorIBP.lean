@@ -1,8 +1,10 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianIBP
+import LeanSudakov.LSECalculus
 import Mathlib.MeasureTheory.SpecificCodomains.Pi
 import Mathlib.Probability.Distributions.Gaussian.Basic
 import Mathlib.Probability.Moments.CovarianceBilinDual
+import Mathlib.Probability.Moments.Variance
 
 open MeasureTheory ProbabilityTheory
 open scoped BigOperators ENNReal NNReal
@@ -128,10 +130,45 @@ theorem gaussian_integrable_coord_mul_softmax
   integrable_coord_mul_softmax_of_integrable_coord
     (gaussian_integrable_coord μ i)
 
+/-- The integrated coordinate derivative of softmax, rewritten using the explicit Hessian
+entry from `LSECalculus`. -/
+theorem integral_deriv_softmax_update
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) (β : ℝ) (i j : ι) :
+    ∫ x, deriv (fun t => softmax β (Function.update x j t) i) (x j) ∂μ =
+      ∫ x, β * ((if i = j then softmax β x i else 0) -
+        softmax β x i * softmax β x j) ∂μ := by
+  refine integral_congr_ae ?_
+  exact ae_of_all μ fun x => deriv_softmax_update β x i j
+
 /-- Coordinate covariance matrix of a finite-dimensional Gaussian measure. -/
 def gaussianCov {ι : Type*} [Fintype ι]
     (μ : Measure (ι → ℝ)) (i j : ι) : ℝ :=
   covarianceBilinDual μ (coordCLM i) (coordCLM j)
+
+/-- A derivative-form Stein identity for `softmax` immediately gives the explicit
+softmax-Hessian form.
+
+The remaining analytic work is to prove the hypothesis from the full finite-dimensional Gaussian
+Stein theorem. This lemma packages the derivative rewrite so the future proof can use the
+coordinate derivative theorem directly. -/
+theorem gaussian_ibp_softmax_of_deriv_form
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] (β : ℝ) (i j : ι)
+    (hstein :
+      ∫ x, x i * softmax β x j ∂μ =
+        Finset.univ.sum fun k =>
+          gaussianCov μ i k *
+            ∫ x, deriv (fun t => softmax β (Function.update x k t) j) (x k) ∂μ) :
+    ∫ x, x i * softmax β x j ∂μ =
+      Finset.univ.sum fun k =>
+        gaussianCov μ i k *
+          ∫ x, β * ((if j = k then softmax β x j else 0) -
+            softmax β x j * softmax β x k) ∂μ := by
+  rw [hstein]
+  refine Finset.sum_congr rfl ?_
+  intro k _
+  rw [integral_deriv_softmax_update μ β j k]
 
 /-- A finite-dimensional Gaussian measure has finite second moment as a vector-valued random
 variable. -/
@@ -151,6 +188,41 @@ theorem gaussianCov_eq_covariance
     gaussianCov μ i j = cov[(fun x : ι → ℝ => x i), (fun x : ι → ℝ => x j); μ] := by
   rw [gaussianCov]
   exact covarianceBilinDual_eq_covariance (gaussian_memLp_id_two μ) (coordCLM i) (coordCLM j)
+
+/-- Variance of a coordinate increment in terms of the coordinate covariance matrix. -/
+theorem gaussian_variance_sub_eq_cov
+    {ι : Type*} [Fintype ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] (i j : ι) :
+    variance (fun x : ι → ℝ => x i - x j) μ =
+      gaussianCov μ i i - 2 * gaussianCov μ i j + gaussianCov μ j j := by
+  have hi2 : MemLp (fun x : ι → ℝ => x i) 2 μ := by
+    simpa [coordCLM] using IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)
+  have hj2 : MemLp (fun x : ι → ℝ => x j) 2 μ := by
+    simpa [coordCLM] using IsGaussian.memLp_dual μ (coordCLM j) 2 (by simp)
+  rw [variance_fun_sub hi2 hj2]
+  rw [← covariance_self hi2.aemeasurable]
+  rw [← covariance_self hj2.aemeasurable]
+  rw [← gaussianCov_eq_covariance μ i i]
+  rw [← gaussianCov_eq_covariance μ i j]
+  rw [← gaussianCov_eq_covariance μ j j]
+
+/-- The Sudakov-Fernique variance increment hypothesis, translated to the pairwise covariance
+form needed by the Hessian covariance sign lemma. -/
+theorem gaussian_cov_pair_nonneg_of_variance_le
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY) :
+    ∀ i j,
+      0 ≤
+        (gaussianCov μY i i - gaussianCov μX i i) +
+          (gaussianCov μY j j - gaussianCov μX j j) -
+            2 * (gaussianCov μY i j - gaussianCov μX i j) := by
+  intro i j
+  have h := hinc i j
+  rw [gaussian_variance_sub_eq_cov μX i j, gaussian_variance_sub_eq_cov μY i j] at h
+  linarith
 
 /-- The coordinate covariance matrix as a centered second moment. -/
 theorem gaussianCov_eq_integral_centered_mul

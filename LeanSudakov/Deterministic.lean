@@ -243,6 +243,37 @@ theorem hessian_cov_rewrite
   rw [hleft, hquad]
   ring
 
+theorem hessian_cov_nonneg_of_pairwise
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    {β : ℝ} (hβ : 0 ≤ β) (p : ι → ℝ) (A : ι → ι → ℝ)
+    (hp_nonneg : ∀ i, 0 ≤ p i)
+    (hsum : Finset.univ.sum p = 1)
+    (hpair : ∀ i j, 0 ≤ A i i + A j j - 2 * A i j) :
+    0 ≤
+      (Finset.univ.sum fun i =>
+        Finset.univ.sum fun j =>
+          β * ((if i = j then p i else 0) - p i * p j) * A i j) := by
+  rw [hessian_cov_rewrite β p A hsum]
+  refine mul_nonneg ?_ ?_
+  · exact div_nonneg hβ (by norm_num)
+  · refine Finset.sum_nonneg ?_
+    intro i _
+    refine Finset.sum_nonneg ?_
+    intro j _
+    exact mul_nonneg (mul_nonneg (hp_nonneg i) (hp_nonneg j)) (hpair i j)
+
+theorem hessian_cov_nonneg_softmax
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    {β : ℝ} (hβ : 0 ≤ β) (x : ι → ℝ) (A : ι → ι → ℝ)
+    (hpair : ∀ i j, 0 ≤ A i i + A j j - 2 * A i j) :
+    0 ≤
+      (Finset.univ.sum fun i =>
+        Finset.univ.sum fun j =>
+          β * ((if i = j then softmax β x i else 0) -
+            softmax β x i * softmax β x j) * A i j) := by
+  exact hessian_cov_nonneg_of_pairwise hβ (fun i => softmax β x i) A
+    (softmax_nonneg β x) (sum_softmax β x) hpair
+
 -- TODO: Prove the Gaussian interpolation monotonicity for log-sum-exp.
 -- The intended statement is:
 --
