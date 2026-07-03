@@ -1,4 +1,5 @@
 import LeanSudakov.Deterministic
+import LeanSudakov.GaussianVectorIBP
 import Mathlib.MeasureTheory.Integral.Bochner.Basic
 import Mathlib.MeasureTheory.Integral.Bochner.Set
 import Mathlib.Probability.Distributions.Gaussian.Basic
@@ -77,8 +78,8 @@ theorem sudakov_fernique_of_lse_mono
 Gaussian interpolation monotonicity for `lse`.
 
 Once `gaussian_interpolation_lse_mono` is available, `hlse_mono` should be discharged by that
-lemma, and the remaining integrability hypotheses should follow from Fernique/moment bounds for
-finite-dimensional Gaussian measures. -/
+lemma. The integrability hypotheses in `sudakov_fernique_of_lse_mono` are discharged by the
+finite-dimensional Gaussian moment bounds in `GaussianVectorIBP`. -/
 theorem sudakov_fernique_of_gaussian_interpolation
     {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
     (μX μY : Measure (ι → ℝ))
@@ -89,17 +90,15 @@ theorem sudakov_fernique_of_gaussian_interpolation
     (_hinc : ∀ i j,
       ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX
         ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY)
-    (hmaxX_int : Integrable (fun x => vecMax x) μX)
-    (hmaxY_int : Integrable (fun y => vecMax y) μY)
-    (hlseX_int : ∀ {β : ℝ}, 0 < β → Integrable (fun x => lse β x) μX)
-    (hlseY_int : ∀ {β : ℝ}, 0 < β → Integrable (fun y => lse β y) μY)
     (hlse_mono : ∀ {β : ℝ}, 0 < β →
       ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY) :
     ∫ x, vecMax x ∂μX ≤ ∫ y, vecMax y ∂μY := by
   exact sudakov_fernique_of_lse_mono μX μY
-    hmaxX_int hmaxY_int hlseX_int hlseY_int hlse_mono
+    (gaussian_integrable_vecMax μX) (gaussian_integrable_vecMax μY)
+    (fun {_β} hβ => gaussian_integrable_lse μX hβ)
+    (fun {_β} hβ => gaussian_integrable_lse μY hβ)
+    hlse_mono
 
--- TODO: Prove Gaussian interpolation for `lse`, then use it to remove `hlse_mono`
--- from `sudakov_fernique_of_gaussian_interpolation`.
+-- TODO: Prove Gaussian interpolation for `lse`, then use it to remove `hlse_mono`.
 
 end

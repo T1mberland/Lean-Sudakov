@@ -1,6 +1,8 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianIBP
 import LeanSudakov.LSECalculus
+import Mathlib.MeasureTheory.Function.SpecialFunctions.Basic
+import Mathlib.MeasureTheory.Order.Lattice
 import Mathlib.MeasureTheory.SpecificCodomains.Pi
 import Mathlib.Probability.Distributions.Gaussian.Basic
 import Mathlib.Probability.Moments.CovarianceBilinDual
@@ -130,6 +132,69 @@ theorem gaussian_integrable_coord_mul_softmax
   integrable_coord_mul_softmax_of_integrable_coord
     (gaussian_integrable_coord μ i)
 
+theorem measurable_vecMax
+    {ι : Type*} [Fintype ι] [Nonempty ι] :
+    Measurable fun x : ι → ℝ => vecMax x := by
+  have h : Measurable
+      ((Finset.univ : Finset ι).sup' Finset.univ_nonempty
+        (fun i => fun x : ι → ℝ => x i)) :=
+    Finset.measurable_sup'
+    (s := (Finset.univ : Finset ι)) Finset.univ_nonempty
+    (f := fun i => fun x : ι → ℝ => x i)
+    (fun i _ => measurable_pi_apply i)
+  convert h using 1
+  ext x
+  simp [vecMax]
+
+theorem aestronglyMeasurable_vecMax
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μ : Measure (ι → ℝ)) :
+    AEStronglyMeasurable (fun x : ι → ℝ => vecMax x) μ :=
+  measurable_vecMax.aestronglyMeasurable
+
+theorem measurable_lse
+    {ι : Type*} [Fintype ι]
+    (β : ℝ) :
+    Measurable fun x : ι → ℝ => lse β x := by
+  change Measurable fun x : ι → ℝ =>
+    Real.log ((Finset.univ).sum fun i => Real.exp (β * x i)) / β
+  exact (Real.measurable_log.comp
+    (Finset.measurable_sum (s := (Finset.univ : Finset ι)) fun i _ =>
+      Real.measurable_exp.comp (measurable_const.mul (measurable_pi_apply i)))).div_const β
+
+theorem aestronglyMeasurable_lse
+    {ι : Type*} [Fintype ι]
+    (μ : Measure (ι → ℝ)) (β : ℝ) :
+    AEStronglyMeasurable (fun x : ι → ℝ => lse β x) μ :=
+  (measurable_lse β).aestronglyMeasurable
+
+theorem gaussian_integrable_sum_abs_coord
+    {ι : Type*} [Fintype ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] :
+    Integrable (fun x : ι → ℝ => (Finset.univ).sum fun i => |x i|) μ :=
+  integrable_finset_sum (s := (Finset.univ : Finset ι)) fun i _ =>
+    (gaussian_integrable_coord μ i).abs
+
+theorem gaussian_integrable_vecMax
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] :
+    Integrable (fun x : ι → ℝ => vecMax x) μ := by
+  refine Integrable.mono' (gaussian_integrable_sum_abs_coord μ)
+    (aestronglyMeasurable_vecMax μ) ?_
+  exact ae_of_all μ fun x => by
+    simpa [Real.norm_eq_abs] using abs_vecMax_le_sum_abs x
+
+theorem gaussian_integrable_lse
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] {β : ℝ} (hβ : 0 < β) :
+    Integrable (fun x : ι → ℝ => lse β x) μ := by
+  let c : ℝ := Real.log (Fintype.card ι) / β
+  have hbound_int : Integrable (fun x : ι → ℝ => (Finset.univ).sum (fun i => |x i|) + c) μ :=
+    (gaussian_integrable_sum_abs_coord μ).add (integrable_const c)
+  refine Integrable.mono' hbound_int (aestronglyMeasurable_lse μ β) ?_
+  exact ae_of_all μ fun x => by
+    simpa [Real.norm_eq_abs, c] using abs_lse_le_sum_abs_add hβ x
+
 /-- The integrated coordinate derivative of softmax, rewritten using the explicit Hessian
 entry from `LSECalculus`. -/
 theorem integral_deriv_softmax_update
@@ -169,6 +234,28 @@ theorem gaussian_ibp_softmax_of_deriv_form
   refine Finset.sum_congr rfl ?_
   intro k _
   rw [integral_deriv_softmax_update μ β j k]
+
+/-- Specialization of a coordinate Stein identity to the softmax test functions.
+
+This theorem is intentionally conditional: its hypothesis is exactly the nonlinear finite-dimensional
+Gaussian Stein theorem applied to `f x = softmax β x j`. The conclusion is the explicit Hessian
+form needed by the Sudakov-Fernique interpolation proof. -/
+theorem gaussian_ibp_softmax_of_coordinate_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] (β : ℝ)
+    (hstein : ∀ i j,
+      ∫ x, x i * softmax β x j ∂μ =
+        Finset.univ.sum fun k =>
+          gaussianCov μ i k *
+            ∫ x, deriv (fun t => softmax β (Function.update x k t) j) (x k) ∂μ) :
+    ∀ i j,
+      ∫ x, x i * softmax β x j ∂μ =
+        Finset.univ.sum fun k =>
+          gaussianCov μ i k *
+            ∫ x, β * ((if j = k then softmax β x j else 0) -
+              softmax β x j * softmax β x k) ∂μ := by
+  intro i j
+  exact gaussian_ibp_softmax_of_deriv_form μ β i j (hstein i j)
 
 /-- A finite-dimensional Gaussian measure has finite second moment as a vector-valued random
 variable. -/
@@ -223,6 +310,27 @@ theorem gaussian_cov_pair_nonneg_of_variance_le
   have h := hinc i j
   rw [gaussian_variance_sub_eq_cov μX i j, gaussian_variance_sub_eq_cov μY i j] at h
   linarith
+
+/-- The covariance-difference contraction with the log-sum-exp Hessian is pointwise
+nonnegative under the Sudakov-Fernique variance increment hypothesis. -/
+theorem softmax_hessian_cov_contraction_nonneg_of_variance_le
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 ≤ β) (x : ι → ℝ) :
+    0 ≤
+      (Finset.univ.sum fun i =>
+        Finset.univ.sum fun j =>
+          β * ((if i = j then softmax β x i else 0) -
+            softmax β x i * softmax β x j) *
+              (gaussianCov μY i j - gaussianCov μX i j)) := by
+  exact hessian_cov_nonneg_softmax hβ x
+    (fun i j => gaussianCov μY i j - gaussianCov μX i j)
+    (by
+      intro i j
+      simpa using gaussian_cov_pair_nonneg_of_variance_le μX μY hinc i j)
 
 /-- The coordinate covariance matrix as a centered second moment. -/
 theorem gaussianCov_eq_integral_centered_mul

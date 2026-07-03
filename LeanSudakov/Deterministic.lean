@@ -90,6 +90,71 @@ theorem lse_le_vecMax_add
       field_simp [hβ.ne']
       ring
 
+theorem neg_sum_abs_le_vecMax
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (x : ι → ℝ) :
+    -((Finset.univ).sum fun i => |x i|) ≤ vecMax x := by
+  obtain ⟨i₀⟩ := ‹Nonempty ι›
+  have hsingle :
+      |x i₀| ≤ (Finset.univ).sum fun i => |x i| :=
+    Finset.single_le_sum
+      (s := (Finset.univ : Finset ι))
+      (f := fun i => |x i|)
+      (fun _ _ => abs_nonneg _) (Finset.mem_univ i₀)
+  have hcoord : -((Finset.univ).sum fun i => |x i|) ≤ x i₀ := by
+    exact (neg_le_neg hsingle).trans (neg_abs_le (x i₀))
+  have hle_max : x i₀ ≤ vecMax x := by
+    simpa [vecMax] using
+      (Finset.le_sup' (s := (Finset.univ : Finset ι)) (f := x) (Finset.mem_univ i₀))
+  exact hcoord.trans hle_max
+
+theorem vecMax_le_sum_abs
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (x : ι → ℝ) :
+    vecMax x ≤ (Finset.univ).sum fun i => |x i| := by
+  rw [vecMax]
+  refine Finset.sup'_le _ _ ?_
+  intro i hi
+  exact (le_abs_self (x i)).trans <|
+    Finset.single_le_sum
+      (s := (Finset.univ : Finset ι))
+      (f := fun k => |x k|)
+      (fun _ _ => abs_nonneg _) hi
+
+theorem abs_vecMax_le_sum_abs
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (x : ι → ℝ) :
+    |vecMax x| ≤ (Finset.univ).sum fun i => |x i| := by
+  exact abs_le.2 ⟨neg_sum_abs_le_vecMax x, vecMax_le_sum_abs x⟩
+
+theorem neg_sum_abs_le_lse
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β : ℝ} (hβ : 0 < β) (x : ι → ℝ) :
+    -((Finset.univ).sum fun i => |x i|) ≤ lse β x :=
+  (neg_sum_abs_le_vecMax x).trans (vecMax_le_lse hβ x)
+
+theorem lse_le_sum_abs_add
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β : ℝ} (hβ : 0 < β) (x : ι → ℝ) :
+    lse β x ≤ (Finset.univ).sum (fun i => |x i|) + Real.log (Fintype.card ι) / β :=
+  (lse_le_vecMax_add hβ x).trans <| by
+    gcongr
+    exact vecMax_le_sum_abs x
+
+theorem abs_lse_le_sum_abs_add
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β : ℝ} (hβ : 0 < β) (x : ι → ℝ) :
+    |lse β x| ≤
+      (Finset.univ).sum (fun i => |x i|) + Real.log (Fintype.card ι) / β := by
+  have hcard_one : (1 : ℝ) ≤ (Fintype.card ι : ℝ) := by
+    have hnat : 1 ≤ Fintype.card ι := Nat.succ_le_iff.2 (Fintype.card_pos (α := ι))
+    exact_mod_cast hnat
+  have hc_nonneg : 0 ≤ Real.log (Fintype.card ι) / β :=
+    div_nonneg (Real.log_nonneg hcard_one) hβ.le
+  have hlow := neg_sum_abs_le_lse hβ x
+  have hup := lse_le_sum_abs_add hβ x
+  exact abs_le.2 ⟨by linarith, hup⟩
+
 def softmax {ι : Type*} [Fintype ι]
     (β : ℝ) (x : ι → ℝ) (i : ι) : ℝ :=
   Real.exp (β * x i) /
