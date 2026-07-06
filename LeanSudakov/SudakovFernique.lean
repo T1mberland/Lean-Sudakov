@@ -1,5 +1,6 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianVectorIBP
+import Mathlib.Analysis.Calculus.Deriv.MeanValue
 import Mathlib.MeasureTheory.Integral.Bochner.Basic
 import Mathlib.MeasureTheory.Integral.Bochner.Set
 import Mathlib.Probability.Distributions.Gaussian.Basic
@@ -9,6 +10,35 @@ open MeasureTheory
 open scoped BigOperators
 
 noncomputable section
+
+/-- Real-analysis bridge for Gaussian interpolation.
+
+If an interpolation functional `F` connects the two log-sum-exp expectations and has nonnegative
+derivative on the open interpolation interval, then the desired log-sum-exp comparison follows.
+
+The remaining Gaussian interpolation work is to construct such an `F` from the centered Gaussian
+pair and prove the derivative formula/sign using `gaussian_ibp_softmax` and
+`softmax_hessian_cov_contraction_nonneg_of_variance_le`. -/
+theorem gaussian_interpolation_lse_mono_of_deriv_nonneg
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) (β : ℝ)
+    (F : ℝ → ℝ)
+    (hF0 : F 0 = ∫ x, lse β x ∂μX)
+    (hF1 : F 1 = ∫ y, lse β y ∂μY)
+    (hFcont : ContinuousOn F (Set.Icc 0 1))
+    (hFdiff : DifferentiableOn ℝ F (interior (Set.Icc (0 : ℝ) 1)))
+    (hFderiv_nonneg : ∀ t ∈ Set.Ioo (0 : ℝ) 1, 0 ≤ deriv F t) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY := by
+  have hmono : MonotoneOn F (Set.Icc (0 : ℝ) 1) := by
+    refine monotoneOn_of_deriv_nonneg (convex_Icc 0 1) hFcont ?_ ?_
+    · intro t ht
+      exact hFdiff t ht
+    · intro t ht
+      exact hFderiv_nonneg t (by simpa using ht)
+  calc
+    ∫ x, lse β x ∂μX = F 0 := hF0.symm
+    _ ≤ F 1 := hmono (by norm_num) (by norm_num) (by norm_num)
+    _ = ∫ y, lse β y ∂μY := hF1
 
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
