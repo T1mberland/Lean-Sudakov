@@ -148,6 +148,98 @@ theorem hasDerivAt_lse_gaussianInterpMap_derivIntegrand
       (gaussianInterpLSEDerivIntegrand β t p) t := by
   simpa [gaussianInterpLSEDerivIntegrand] using hasDerivAt_lse_gaussianInterpMap hβ ht p
 
+/-- A local first-moment bound for the derivative integrand near an interior interpolation time. -/
+noncomputable def gaussianInterpLSEDerivBound
+    {ι : Type*} [Fintype ι] (t : ℝ) (p : (ι → ℝ) × (ι → ℝ)) : ℝ :=
+  Finset.univ.sum fun i =>
+    (1 / (2 * Real.sqrt (t / 2))) * |p.2 i| +
+      (1 / (2 * Real.sqrt ((1 - t) / 2))) * |p.1 i|
+
+private theorem one_div_two_sqrt_le_one_div_two_sqrt
+    {a b : ℝ} (ha : 0 < a) (hab : a ≤ b) :
+    1 / (2 * Real.sqrt b) ≤ 1 / (2 * Real.sqrt a) := by
+  have hsqrt_le : Real.sqrt a ≤ Real.sqrt b := Real.sqrt_le_sqrt hab
+  have hden_pos : 0 < 2 * Real.sqrt a := by positivity
+  have hden_le : 2 * Real.sqrt a ≤ 2 * Real.sqrt b := by
+    nlinarith [hsqrt_le]
+  exact one_div_le_one_div_of_le hden_pos hden_le
+
+theorem gaussianInterpLSEDerivIntegrand_le_bound
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (β : ℝ) {t s : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (hs : s ∈ Set.Ioo (t / 2) ((t + 1) / 2))
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    ‖gaussianInterpLSEDerivIntegrand (ι := ι) β s p‖ ≤
+      gaussianInterpLSEDerivBound (ι := ι) t p := by
+  classical
+  have hs_pos : 0 < s := by linarith [ht.1, hs.1]
+  have h1s_pos : 0 < 1 - s := by linarith [ht.2, hs.2]
+  have ht_half_pos : 0 < t / 2 := by linarith [ht.1]
+  have h1t_half_pos : 0 < (1 - t) / 2 := by linarith [ht.2]
+  have hs_inv :
+      1 / (2 * Real.sqrt s) ≤ 1 / (2 * Real.sqrt (t / 2)) :=
+    one_div_two_sqrt_le_one_div_two_sqrt ht_half_pos hs.1.le
+  have h1s_inv :
+      1 / (2 * Real.sqrt (1 - s)) ≤
+        1 / (2 * Real.sqrt ((1 - t) / 2)) := by
+    have hle : (1 - t) / 2 ≤ 1 - s := by linarith [hs.2]
+    exact one_div_two_sqrt_le_one_div_two_sqrt h1t_half_pos hle
+  rw [gaussianInterpLSEDerivIntegrand, Real.norm_eq_abs]
+  calc
+    |Finset.univ.sum fun i =>
+        softmax β (gaussianInterpMap (ι := ι) s p) i *
+          (p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s)))|
+        ≤ Finset.univ.sum fun i =>
+            |softmax β (gaussianInterpMap (ι := ι) s p) i *
+              (p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s)))| := by
+          exact Finset.abs_sum_le_sum_abs _ _
+    _ ≤ gaussianInterpLSEDerivBound (ι := ι) t p := by
+      refine Finset.sum_le_sum fun i _ => ?_
+      rw [abs_mul]
+      calc
+        |softmax β (gaussianInterpMap (ι := ι) s p) i| *
+            |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))|
+            ≤ 1 *
+              |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))| := by
+              exact mul_le_mul_of_nonneg_right
+                (abs_softmax_le_one β (gaussianInterpMap (ι := ι) s p) i) (abs_nonneg _)
+        _ = |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))| := by ring
+        _ ≤ (1 / (2 * Real.sqrt (t / 2))) * |p.2 i| +
+              (1 / (2 * Real.sqrt ((1 - t) / 2))) * |p.1 i| := by
+          have hden_s_pos : 0 < 2 * Real.sqrt s := by positivity
+          have hden_1s_pos : 0 < 2 * Real.sqrt (1 - s) := by positivity
+          calc
+            |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))|
+                ≤ |p.2 i / (2 * Real.sqrt s)| +
+                    |p.1 i / (2 * Real.sqrt (1 - s))| := abs_sub _ _
+            _ = |p.2 i| * (1 / (2 * Real.sqrt s)) +
+                  |p.1 i| * (1 / (2 * Real.sqrt (1 - s))) := by
+              rw [abs_div, abs_div]
+              rw [abs_of_pos hden_s_pos, abs_of_pos hden_1s_pos]
+              ring
+            _ ≤ |p.2 i| * (1 / (2 * Real.sqrt (t / 2))) +
+                  |p.1 i| * (1 / (2 * Real.sqrt ((1 - t) / 2))) := by
+              gcongr
+            _ = (1 / (2 * Real.sqrt (t / 2))) * |p.2 i| +
+                  (1 / (2 * Real.sqrt ((1 - t) / 2))) * |p.1 i| := by
+              ring
+
+theorem integrable_gaussianInterpLSEDerivBound
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (t : ℝ) :
+    Integrable (gaussianInterpLSEDerivBound (ι := ι) t) (μX.prod μY) := by
+  classical
+  refine integrable_finset_sum (s := (Finset.univ : Finset ι)) fun i _ => ?_
+  have hY :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.2 i|) (μX.prod μY) := by
+    simpa using (gaussian_integrable_coord μY i).abs.comp_snd μX
+  have hX :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.1 i|) (μX.prod μY) := by
+    simpa using (gaussian_integrable_coord μX i).abs.comp_fst μY
+  exact (hY.const_mul (1 / (2 * Real.sqrt (t / 2)))).add
+    (hX.const_mul (1 / (2 * Real.sqrt ((1 - t) / 2))))
+
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
 noncomputable def gaussianInterpMeasure
@@ -211,6 +303,22 @@ theorem hasDerivAt_gaussianInterpolationLSE_of_dominated
     rw [integral_map
       ((gaussianInterpMap (ι := ι) s).measurable.aemeasurable)
       ((measurable_lse β).aestronglyMeasurable)]
+
+theorem hasDerivAt_gaussianInterpolationLSE_of_integrable
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY] {β t : ℝ}
+    (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (hF_int :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) =>
+        lse β (gaussianInterpMap (ι := ι) t p)) (μX.prod μY)) :
+    HasDerivAt (gaussianInterpolationLSE μX μY β)
+      (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) t := by
+  refine hasDerivAt_gaussianInterpolationLSE_of_dominated
+    (μX := μX) (μY := μY) hβ ht hF_int
+    (bound := gaussianInterpLSEDerivBound (ι := ι) t) ?_ ?_
+  · exact ae_of_all (μX.prod μY) fun p s hs =>
+      gaussianInterpLSEDerivIntegrand_le_bound β ht hs p
+  · exact integrable_gaussianInterpLSEDerivBound μX μY t
 
 @[simp]
 theorem gaussianInterpMap_zero
