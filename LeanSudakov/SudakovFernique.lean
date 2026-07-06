@@ -1,6 +1,7 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianVectorIBP
 import Mathlib.Analysis.Calculus.Deriv.MeanValue
+import Mathlib.Analysis.SpecialFunctions.Sqrt
 import Mathlib.MeasureTheory.Integral.Bochner.Basic
 import Mathlib.MeasureTheory.Integral.Bochner.Set
 import Mathlib.Probability.Distributions.Gaussian.Basic
@@ -26,6 +27,96 @@ theorem gaussianInterpMap_apply
     gaussianInterpMap (ι := ι) t p i =
       Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i := by
   simp [gaussianInterpMap, Pi.add_apply, Pi.smul_apply, smul_eq_mul]
+
+/-- Coordinate derivative of the interpolation path at interior times. -/
+theorem hasDerivAt_gaussianInterpMap_apply
+    {ι : Type*} {t : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) (i : ι) :
+    HasDerivAt (fun s => gaussianInterpMap (ι := ι) s p i)
+      ((p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t))) t := by
+  have ht_ne : t ≠ 0 := ne_of_gt ht.1
+  have h1t_ne : 1 - t ≠ 0 := by linarith [ht.2]
+  have hsqrt_t :
+      HasDerivAt (fun s : ℝ => Real.sqrt s) (1 / (2 * Real.sqrt t)) t :=
+    Real.hasDerivAt_sqrt ht_ne
+  have hsqrt_1t :
+      HasDerivAt (fun s : ℝ => Real.sqrt (1 - s))
+        (-1 / (2 * Real.sqrt (1 - t))) t := by
+    simpa using
+      ((hasDerivAt_const (x := t) (1 : ℝ)).sub (hasDerivAt_id t)).sqrt h1t_ne
+  have hx :=
+    (hsqrt_1t.const_mul (p.1 i)).add (hsqrt_t.const_mul (p.2 i))
+  convert hx using 1
+  · ext s
+    simp [gaussianInterpMap, mul_comm]
+  · field_simp [ht_ne, h1t_ne]
+    ring
+
+/-- Pointwise derivative of log-sum-exp along the Gaussian interpolation path. -/
+theorem hasDerivAt_lse_gaussianInterpMap
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β t : ℝ} (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    HasDerivAt (fun s => lse β (gaussianInterpMap (ι := ι) s p))
+      (Finset.univ.sum fun i =>
+        softmax β (gaussianInterpMap (ι := ι) t p) i *
+          ((p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t)))) t := by
+  classical
+  let z : ℝ → ι → ℝ := fun s => gaussianInterpMap (ι := ι) s p
+  let dz : ι → ℝ := fun i =>
+    (p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t))
+  have hz (i : ι) : HasDerivAt (fun s => z s i) (dz i) t := by
+    simpa [z, dz] using hasDerivAt_gaussianInterpMap_apply ht p i
+  have hexp (i : ι) :
+      HasDerivAt (fun s => Real.exp (β * z s i))
+        (β * dz i * Real.exp (β * z t i)) t := by
+    convert ((hz i).const_mul β).exp using 1
+    ring
+  have hsum :
+      HasDerivAt
+        (fun s => Finset.univ.sum fun i => Real.exp (β * z s i))
+        (Finset.univ.sum fun i => β * dz i * Real.exp (β * z t i)) t :=
+    HasDerivAt.fun_sum (u := (Finset.univ : Finset ι)) fun i _ => hexp i
+  have hSpos : 0 < (Finset.univ.sum fun i => Real.exp (β * z t i)) := by
+    classical
+    let i : ι := Classical.choice inferInstance
+    exact lt_of_lt_of_le (Real.exp_pos (β * z t i)) <|
+      Finset.single_le_sum
+        (s := (Finset.univ : Finset ι))
+        (f := fun i => Real.exp (β * z t i))
+        (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i)
+  have hlog := hsum.log hSpos.ne'
+  have hdiv := hlog.div_const β
+  have hdiv' :
+      HasDerivAt (fun s => lse β (z s))
+        ((Finset.univ.sum fun i => β * dz i * Real.exp (β * z t i)) /
+          (Finset.univ.sum fun i => Real.exp (β * z t i)) / β) t := by
+    simpa [lse] using hdiv
+  change HasDerivAt (fun s => lse β (z s))
+    (Finset.univ.sum fun i => softmax β (z t) i * dz i) t
+  convert hdiv' using 1
+  simp only [softmax]
+  field_simp [hβ, hSpos.ne']
+  rw [Finset.mul_sum]
+  refine Finset.sum_congr rfl fun i _ => ?_
+  field_simp [hSpos.ne']
+
+/-- Pointwise `deriv` form of the log-sum-exp derivative along the interpolation path. -/
+theorem deriv_lse_gaussianInterpMap
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β t : ℝ} (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    deriv (fun s => lse β (gaussianInterpMap (ι := ι) s p)) t =
+      (1 / 2) *
+        (Finset.univ.sum fun i =>
+          softmax β (gaussianInterpMap (ι := ι) t p) i *
+            (p.2 i / Real.sqrt t - p.1 i / Real.sqrt (1 - t))) := by
+  rw [(hasDerivAt_lse_gaussianInterpMap hβ ht p).deriv]
+  rw [Finset.mul_sum]
+  refine Finset.sum_congr rfl fun i _ => ?_
+  have ht_ne : Real.sqrt t ≠ 0 := Real.sqrt_ne_zero'.2 ht.1
+  have h1t_ne : Real.sqrt (1 - t) ≠ 0 := Real.sqrt_ne_zero'.2 (by linarith [ht.2])
+  field_simp [ht_ne, h1t_ne]
 
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
