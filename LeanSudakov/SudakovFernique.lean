@@ -229,6 +229,45 @@ theorem gaussian_interpolation_lse_mono_of_deriv_nonneg
     _ ≤ F 1 := hmono (by norm_num) (by norm_num) (by norm_num)
     _ = ∫ y, lse β y ∂μY := hF1
 
+/-- Gaussian interpolation monotonicity, reduced to the concrete derivative formula for
+`gaussianInterpolationLSE`.
+
+The remaining analytic step is to prove `hderiv` by differentiating the integral along the
+interpolation path and applying `gaussian_ibp_softmax` to the interpolated Gaussian law. -/
+theorem gaussian_interpolation_lse_mono_of_deriv_formula
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β)
+    (hFcont : ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1))
+    (hFdiff : DifferentiableOn ℝ (gaussianInterpolationLSE μX μY β)
+      (interior (Set.Icc (0 : ℝ) 1)))
+    (hderiv : ∀ t ∈ Set.Ioo (0 : ℝ) 1,
+      deriv (gaussianInterpolationLSE μX μY β) t =
+        (1 / 2) *
+          ∫ z,
+            (Finset.univ.sum fun i =>
+              Finset.univ.sum fun j =>
+                β * ((if i = j then softmax β z i else 0) -
+                  softmax β z i * softmax β z j) *
+                    (gaussianCov μY i j - gaussianCov μX i j))
+            ∂gaussianInterpMeasure μX μY t) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY := by
+  refine gaussian_interpolation_lse_mono_of_deriv_nonneg
+    μX μY β (gaussianInterpolationLSE μX μY β) ?_ ?_ hFcont hFdiff ?_
+  · exact gaussianInterpolationLSE_zero μX μY β
+  · exact gaussianInterpolationLSE_one μX μY β
+  · intro t ht
+    rw [hderiv t ht]
+    refine mul_nonneg ?_ ?_
+    · norm_num
+    · exact integral_nonneg fun z =>
+        softmax_hessian_cov_contraction_nonneg_of_variance_le μX μY hinc hβ.le z
+
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
     (h : ∀ β : ℝ, 0 < β → a ≤ b + c / β) :
