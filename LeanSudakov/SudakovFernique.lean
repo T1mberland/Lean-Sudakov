@@ -7,6 +7,7 @@ import Mathlib.Probability.Distributions.Gaussian.Basic
 import Mathlib.Probability.Moments.Variance
 
 open MeasureTheory
+open ProbabilityTheory
 open scoped BigOperators
 
 noncomputable section
@@ -86,6 +87,118 @@ theorem gaussianInterpolationLSE_one
     [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] (β : ℝ) :
     gaussianInterpolationLSE μX μY β 1 = ∫ y, lse β y ∂μY := by
   simp [gaussianInterpolationLSE]
+
+/-- Coordinate covariance of the interpolation law, before simplifying the square roots.
+
+The explicit `IsGaussian` assumption for the interpolation law avoids expensive typeclass search
+through the product Gaussian instance; later uses can provide it locally once the interpolation law
+has been constructed as a Gaussian linear image. -/
+theorem gaussianCov_gaussianInterpMeasure
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (t : ℝ) [IsGaussian (gaussianInterpMeasure μX μY t)]
+    (i j : ι) :
+    gaussianCov (gaussianInterpMeasure μX μY t) i j =
+      (Real.sqrt (1 - t)) ^ 2 * gaussianCov μX i j +
+        (Real.sqrt t) ^ 2 * gaussianCov μY i j := by
+  classical
+  let a : ℝ := Real.sqrt (1 - t)
+  let b : ℝ := Real.sqrt t
+  let μ : Measure ((ι → ℝ) × (ι → ℝ)) := μX.prod μY
+  have hXi2 (k : ι) : MemLp (fun p : (ι → ℝ) × (ι → ℝ) => p.1 k) 2 μ := by
+    simpa [μ, coordCLM] using
+      (IsGaussian.memLp_dual μX (coordCLM k) 2 (by simp)).comp_fst μY
+  have hYi2 (k : ι) : MemLp (fun p : (ι → ℝ) × (ι → ℝ) => p.2 k) 2 μ := by
+    simpa [μ, coordCLM] using
+      (IsGaussian.memLp_dual μY (coordCLM k) 2 (by simp)).comp_snd μX
+  rw [gaussianCov_eq_covariance]
+  rw [gaussianInterpMeasure]
+  rw [covariance_map_fun
+    (measurable_pi_apply i).aestronglyMeasurable
+    (measurable_pi_apply j).aestronglyMeasurable
+    (gaussianInterpMap (ι := ι) t).measurable.aemeasurable]
+  change
+    cov[(fun p : (ι → ℝ) × (ι → ℝ) => a * p.1 i + b * p.2 i),
+        (fun p : (ι → ℝ) × (ι → ℝ) => a * p.1 j + b * p.2 j); μ] =
+      a ^ 2 * gaussianCov μX i j + b ^ 2 * gaussianCov μY i j
+  change
+    cov[(fun p : (ι → ℝ) × (ι → ℝ) => a * p.1 i) + (fun p => b * p.2 i),
+        (fun p : (ι → ℝ) × (ι → ℝ) => a * p.1 j) + (fun p => b * p.2 j); μ] =
+      a ^ 2 * gaussianCov μX i j + b ^ 2 * gaussianCov μY i j
+  rw [covariance_add_left ((hXi2 i).const_mul a) ((hYi2 i).const_mul b)
+    (((hXi2 j).const_mul a).add ((hYi2 j).const_mul b))]
+  rw [covariance_add_right ((hXi2 i).const_mul a)
+    ((hXi2 j).const_mul a) ((hYi2 j).const_mul b)]
+  rw [covariance_add_right ((hYi2 i).const_mul b)
+    ((hXi2 j).const_mul a) ((hYi2 j).const_mul b)]
+  simp_rw [covariance_const_mul_left, covariance_const_mul_right]
+  have hcross₁ :
+      cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.1 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.2 j); μ] = 0 := by
+    simpa [μ] using covariance_fst_snd_prod (μ := μX) (ν := μY)
+      (X := fun x : ι → ℝ => x i) (Y := fun y : ι → ℝ => y j)
+      (by simpa [coordCLM] using IsGaussian.memLp_dual μX (coordCLM i) 2 (by simp))
+      (by simpa [coordCLM] using IsGaussian.memLp_dual μY (coordCLM j) 2 (by simp))
+  have hcross₂ :
+      cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.2 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.1 j); μ] = 0 := by
+    rw [covariance_comm]
+    simpa [μ] using covariance_fst_snd_prod (μ := μX) (ν := μY)
+      (X := fun x : ι → ℝ => x j) (Y := fun y : ι → ℝ => y i)
+      (by simpa [coordCLM] using IsGaussian.memLp_dual μX (coordCLM j) 2 (by simp))
+      (by simpa [coordCLM] using IsGaussian.memLp_dual μY (coordCLM i) 2 (by simp))
+  have hfst :
+      cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.1 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.1 j); μ] =
+        cov[(fun x : ι → ℝ => x i), (fun x : ι → ℝ => x j); μX] := by
+    have hmap := covariance_map_fun
+      (μ := μ) (Z := Prod.fst)
+      (X := fun x : ι → ℝ => x i) (Y := fun x : ι → ℝ => x j)
+      (measurable_pi_apply i).aestronglyMeasurable
+      (measurable_pi_apply j).aestronglyMeasurable
+      measurable_fst.aemeasurable
+    change
+      cov[(fun x : ι → ℝ => x i), (fun x : ι → ℝ => x j); Measure.map Prod.fst μ] =
+        cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.1 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.1 j); μ] at hmap
+    dsimp [μ] at hmap
+    rw [Measure.map_fst_prod] at hmap
+    simpa [measure_univ] using hmap.symm
+  have hsnd :
+      cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.2 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.2 j); μ] =
+        cov[(fun y : ι → ℝ => y i), (fun y : ι → ℝ => y j); μY] := by
+    have hmap := covariance_map_fun
+      (μ := μ) (Z := Prod.snd)
+      (X := fun y : ι → ℝ => y i) (Y := fun y : ι → ℝ => y j)
+      (measurable_pi_apply i).aestronglyMeasurable
+      (measurable_pi_apply j).aestronglyMeasurable
+      measurable_snd.aemeasurable
+    change
+      cov[(fun y : ι → ℝ => y i), (fun y : ι → ℝ => y j); Measure.map Prod.snd μ] =
+        cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.2 i),
+          (fun p : (ι → ℝ) × (ι → ℝ) => p.2 j); μ] at hmap
+    dsimp [μ] at hmap
+    rw [Measure.map_snd_prod] at hmap
+    simpa [measure_univ] using hmap.symm
+  rw [hcross₁, hcross₂]
+  rw [hfst, hsnd]
+  rw [← gaussianCov_eq_covariance μX i j]
+  rw [← gaussianCov_eq_covariance μY i j]
+  ring
+
+/-- Coordinate covariance of the interpolation law on the interpolation interval. -/
+theorem gaussianCov_gaussianInterpMeasure_of_mem_Icc
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (t : ℝ) [IsGaussian (gaussianInterpMeasure μX μY t)]
+    (ht : t ∈ Set.Icc (0 : ℝ) 1) (i j : ι) :
+    gaussianCov (gaussianInterpMeasure μX μY t) i j =
+      (1 - t) * gaussianCov μX i j + t * gaussianCov μY i j := by
+  rw [gaussianCov_gaussianInterpMeasure μX μY t i j]
+  rw [Real.sq_sqrt (by linarith [ht.2]), Real.sq_sqrt ht.1]
 
 /-- Real-analysis bridge for Gaussian interpolation.
 
