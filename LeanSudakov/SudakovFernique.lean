@@ -11,6 +11,82 @@ open scoped BigOperators
 
 noncomputable section
 
+/-- The linear interpolation map
+`(x, y) ↦ sqrt (1 - t) • x + sqrt t • y` used in the Gaussian interpolation argument. -/
+noncomputable def gaussianInterpMap
+    {ι : Type*} (t : ℝ) :
+    ((ι → ℝ) × (ι → ℝ)) →L[ℝ] (ι → ℝ) :=
+  Real.sqrt (1 - t) • ContinuousLinearMap.fst ℝ (ι → ℝ) (ι → ℝ) +
+    Real.sqrt t • ContinuousLinearMap.snd ℝ (ι → ℝ) (ι → ℝ)
+
+@[simp]
+theorem gaussianInterpMap_apply
+    {ι : Type*} (t : ℝ) (p : (ι → ℝ) × (ι → ℝ)) (i : ι) :
+    gaussianInterpMap (ι := ι) t p i =
+      Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i := by
+  simp [gaussianInterpMap, Pi.add_apply, Pi.smul_apply, smul_eq_mul]
+
+/-- The Gaussian interpolation measure, realized as a linear image of the independent product
+coupling of the endpoint laws. -/
+noncomputable def gaussianInterpMeasure
+    {ι : Type*} (μX μY : Measure (ι → ℝ)) (t : ℝ) : Measure (ι → ℝ) :=
+  (μX.prod μY).map (gaussianInterpMap (ι := ι) t)
+
+/-- The expected log-sum-exp along the Gaussian interpolation path. -/
+noncomputable def gaussianInterpolationLSE
+    {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ)) (β t : ℝ) : ℝ :=
+  ∫ z, lse β z ∂gaussianInterpMeasure μX μY t
+
+@[simp]
+theorem gaussianInterpMap_zero
+    {ι : Type*} :
+    gaussianInterpMap (ι := ι) 0 = ContinuousLinearMap.fst ℝ (ι → ℝ) (ι → ℝ) := by
+  apply ContinuousLinearMap.ext
+  intro p
+  ext i
+  simp [gaussianInterpMap]
+
+@[simp]
+theorem gaussianInterpMap_one
+    {ι : Type*} :
+    gaussianInterpMap (ι := ι) 1 = ContinuousLinearMap.snd ℝ (ι → ℝ) (ι → ℝ) := by
+  apply ContinuousLinearMap.ext
+  intro p
+  ext i
+  simp [gaussianInterpMap]
+
+@[simp]
+theorem gaussianInterpMeasure_zero
+    {ι : Type*} (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] :
+    gaussianInterpMeasure μX μY 0 = μX := by
+  rw [gaussianInterpMeasure, gaussianInterpMap_zero]
+  change Measure.map Prod.fst (μX.prod μY) = μX
+  rw [Measure.map_fst_prod]
+  simp [measure_univ]
+
+@[simp]
+theorem gaussianInterpMeasure_one
+    {ι : Type*} (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] :
+    gaussianInterpMeasure μX μY 1 = μY := by
+  rw [gaussianInterpMeasure, gaussianInterpMap_one]
+  change Measure.map Prod.snd (μX.prod μY) = μY
+  rw [Measure.map_snd_prod]
+  simp [measure_univ]
+
+@[simp]
+theorem gaussianInterpolationLSE_zero
+    {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] (β : ℝ) :
+    gaussianInterpolationLSE μX μY β 0 = ∫ x, lse β x ∂μX := by
+  simp [gaussianInterpolationLSE]
+
+@[simp]
+theorem gaussianInterpolationLSE_one
+    {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] (β : ℝ) :
+    gaussianInterpolationLSE μX μY β 1 = ∫ y, lse β y ∂μY := by
+  simp [gaussianInterpolationLSE]
+
 /-- Real-analysis bridge for Gaussian interpolation.
 
 If an interpolation functional `F` connects the two log-sum-exp expectations and has nonnegative
