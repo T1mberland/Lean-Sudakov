@@ -173,7 +173,7 @@ theorem hasDerivAt_gaussianInterpolationLSE_of_dominated
     (hF_int :
       Integrable (fun p : (ι → ℝ) × (ι → ℝ) =>
         lse β (gaussianInterpMap (ι := ι) t p)) (μX.prod μY))
-    (hbound : ∀ᵐ p ∂μX.prod μY, ∀ s ∈ Set.Ioo (0 : ℝ) 1,
+    (hbound : ∀ᵐ p ∂μX.prod μY, ∀ s ∈ Set.Ioo (t / 2) ((t + 1) / 2),
       ‖gaussianInterpLSEDerivIntegrand (ι := ι) β s p‖ ≤ bound p)
     (hbound_int : Integrable bound (μX.prod μY)) :
     HasDerivAt (gaussianInterpolationLSE μX μY β)
@@ -184,18 +184,24 @@ theorem hasDerivAt_gaussianInterpolationLSE_of_dominated
     fun s p => lse β (gaussianInterpMap (ι := ι) s p)
   let F' : ℝ → ((ι → ℝ) × (ι → ℝ)) → ℝ :=
     fun s p => gaussianInterpLSEDerivIntegrand (ι := ι) β s p
-  have hs : Set.Ioo (0 : ℝ) 1 ∈ 𝓝 t := isOpen_Ioo.mem_nhds ht
+  have ht_local : t ∈ Set.Ioo (t / 2) ((t + 1) / 2) := by
+    constructor <;> linarith [ht.1, ht.2]
+  have hs : Set.Ioo (t / 2) ((t + 1) / 2) ∈ 𝓝 t := isOpen_Ioo.mem_nhds ht_local
   have hF_meas : ∀ᶠ s in 𝓝 t, AEStronglyMeasurable (F s) μ := by
     exact Filter.Eventually.of_forall fun s => by
       exact ((measurable_lse β).comp (gaussianInterpMap (ι := ι) s).measurable).aestronglyMeasurable
   have hF'_meas : AEStronglyMeasurable (F' t) μ := by
     simpa [F'] using
       (continuous_gaussianInterpLSEDerivIntegrand (ι := ι) β t).aestronglyMeasurable
-  have hdiff : ∀ᵐ p ∂μ, ∀ s ∈ Set.Ioo (0 : ℝ) 1, HasDerivAt (F · p) (F' s p) s := by
+  have hdiff :
+      ∀ᵐ p ∂μ, ∀ s ∈ Set.Ioo (t / 2) ((t + 1) / 2),
+        HasDerivAt (F · p) (F' s p) s := by
     exact ae_of_all μ fun p s hs => by
-      simpa [F, F'] using hasDerivAt_lse_gaussianInterpMap_derivIntegrand hβ hs p
+      have hs01 : s ∈ Set.Ioo (0 : ℝ) 1 := by
+        constructor <;> linarith [ht.1, ht.2, hs.1, hs.2]
+      simpa [F, F'] using hasDerivAt_lse_gaussianInterpMap_derivIntegrand hβ hs01 p
   have hmain := hasDerivAt_integral_of_dominated_loc_of_deriv_le
-    (μ := μ) (F := F) (x₀ := t) (s := Set.Ioo (0 : ℝ) 1)
+    (μ := μ) (F := F) (x₀ := t) (s := Set.Ioo (t / 2) ((t + 1) / 2))
     (bound := bound) hs hF_meas (by simpa [F, μ] using hF_int)
     (by simpa [F', μ] using hF'_meas) (by simpa [F', μ] using hbound)
     (by simpa [μ] using hbound_int) hdiff
