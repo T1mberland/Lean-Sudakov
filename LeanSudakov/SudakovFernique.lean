@@ -1,6 +1,7 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.GaussianVectorIBP
 import Mathlib.Analysis.Calculus.Deriv.MeanValue
+import Mathlib.Analysis.Calculus.ParametricIntegral
 import Mathlib.Analysis.SpecialFunctions.Sqrt
 import Mathlib.MeasureTheory.Integral.Bochner.Basic
 import Mathlib.MeasureTheory.Integral.Bochner.Set
@@ -9,7 +10,7 @@ import Mathlib.Probability.Moments.Variance
 
 open MeasureTheory
 open ProbabilityTheory
-open scoped BigOperators
+open scoped BigOperators Topology
 
 noncomputable section
 
@@ -118,6 +119,35 @@ theorem deriv_lse_gaussianInterpMap
   have h1t_ne : Real.sqrt (1 - t) ≠ 0 := Real.sqrt_ne_zero'.2 (by linarith [ht.2])
   field_simp [ht_ne, h1t_ne]
 
+/-- The pointwise derivative integrand for the log-sum-exp Gaussian interpolation functional. -/
+noncomputable def gaussianInterpLSEDerivIntegrand
+    {ι : Type*} [Fintype ι] (β t : ℝ) (p : (ι → ℝ) × (ι → ℝ)) : ℝ :=
+  Finset.univ.sum fun i =>
+    softmax β (gaussianInterpMap (ι := ι) t p) i *
+      ((p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t)))
+
+theorem continuous_gaussianInterpLSEDerivIntegrand
+    {ι : Type*} [Fintype ι] (β t : ℝ) :
+    Continuous fun p : (ι → ℝ) × (ι → ℝ) =>
+      gaussianInterpLSEDerivIntegrand (ι := ι) β t p := by
+  classical
+  refine continuous_finset_sum Finset.univ fun i _ => ?_
+  have hfst_i : Continuous fun p : (ι → ℝ) × (ι → ℝ) => p.1 i :=
+    (continuous_apply i).comp continuous_fst
+  have hsnd_i : Continuous fun p : (ι → ℝ) × (ι → ℝ) => p.2 i :=
+    (continuous_apply i).comp continuous_snd
+  exact ((continuous_softmax β i).comp (gaussianInterpMap (ι := ι) t).continuous).mul
+    ((hsnd_i.div_const (2 * Real.sqrt t)).sub
+      (hfst_i.div_const (2 * Real.sqrt (1 - t))))
+
+theorem hasDerivAt_lse_gaussianInterpMap_derivIntegrand
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β t : ℝ} (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    HasDerivAt (fun s => lse β (gaussianInterpMap (ι := ι) s p))
+      (gaussianInterpLSEDerivIntegrand β t p) t := by
+  simpa [gaussianInterpLSEDerivIntegrand] using hasDerivAt_lse_gaussianInterpMap hβ ht p
+
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
 noncomputable def gaussianInterpMeasure
@@ -128,6 +158,53 @@ noncomputable def gaussianInterpMeasure
 noncomputable def gaussianInterpolationLSE
     {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ)) (β t : ℝ) : ℝ :=
   ∫ z, lse β z ∂gaussianInterpMeasure μX μY t
+
+/-- Differentiating the Gaussian interpolation log-sum-exp functional under the product integral,
+assuming a local dominated-derivative bound.
+
+The remaining analytic work is to provide `hbound` and `hbound_int` from Gaussian first moments and
+the fact that an interior interpolation time has `sqrt t` and `sqrt (1 - t)` bounded away from
+zero locally. -/
+theorem hasDerivAt_gaussianInterpolationLSE_of_dominated
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) {β t : ℝ}
+    (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    {bound : (ι → ℝ) × (ι → ℝ) → ℝ}
+    (hF_int :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) =>
+        lse β (gaussianInterpMap (ι := ι) t p)) (μX.prod μY))
+    (hbound : ∀ᵐ p ∂μX.prod μY, ∀ s ∈ Set.Ioo (0 : ℝ) 1,
+      ‖gaussianInterpLSEDerivIntegrand (ι := ι) β s p‖ ≤ bound p)
+    (hbound_int : Integrable bound (μX.prod μY)) :
+    HasDerivAt (gaussianInterpolationLSE μX μY β)
+      (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) t := by
+  classical
+  let μ : Measure ((ι → ℝ) × (ι → ℝ)) := μX.prod μY
+  let F : ℝ → ((ι → ℝ) × (ι → ℝ)) → ℝ :=
+    fun s p => lse β (gaussianInterpMap (ι := ι) s p)
+  let F' : ℝ → ((ι → ℝ) × (ι → ℝ)) → ℝ :=
+    fun s p => gaussianInterpLSEDerivIntegrand (ι := ι) β s p
+  have hs : Set.Ioo (0 : ℝ) 1 ∈ 𝓝 t := isOpen_Ioo.mem_nhds ht
+  have hF_meas : ∀ᶠ s in 𝓝 t, AEStronglyMeasurable (F s) μ := by
+    exact Filter.Eventually.of_forall fun s => by
+      exact ((measurable_lse β).comp (gaussianInterpMap (ι := ι) s).measurable).aestronglyMeasurable
+  have hF'_meas : AEStronglyMeasurable (F' t) μ := by
+    simpa [F'] using
+      (continuous_gaussianInterpLSEDerivIntegrand (ι := ι) β t).aestronglyMeasurable
+  have hdiff : ∀ᵐ p ∂μ, ∀ s ∈ Set.Ioo (0 : ℝ) 1, HasDerivAt (F · p) (F' s p) s := by
+    exact ae_of_all μ fun p s hs => by
+      simpa [F, F'] using hasDerivAt_lse_gaussianInterpMap_derivIntegrand hβ hs p
+  have hmain := hasDerivAt_integral_of_dominated_loc_of_deriv_le
+    (μ := μ) (F := F) (x₀ := t) (s := Set.Ioo (0 : ℝ) 1)
+    (bound := bound) hs hF_meas (by simpa [F, μ] using hF_int)
+    (by simpa [F', μ] using hF'_meas) (by simpa [F', μ] using hbound)
+    (by simpa [μ] using hbound_int) hdiff
+  convert hmain.2 using 1
+  · ext s
+    rw [gaussianInterpolationLSE, gaussianInterpMeasure]
+    rw [integral_map
+      ((gaussianInterpMap (ι := ι) s).measurable.aemeasurable)
+      ((measurable_lse β).aestronglyMeasurable)]
 
 @[simp]
 theorem gaussianInterpMap_zero
