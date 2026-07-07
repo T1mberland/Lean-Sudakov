@@ -240,6 +240,51 @@ theorem integrable_gaussianInterpLSEDerivBound
   exact (hY.const_mul (1 / (2 * Real.sqrt (t / 2)))).add
     (hX.const_mul (1 / (2 * Real.sqrt ((1 - t) / 2))))
 
+theorem integrable_lse_gaussianInterpMap
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    {β : ℝ} (hβ : 0 < β) (t : ℝ) :
+    Integrable (fun p : (ι → ℝ) × (ι → ℝ) =>
+      lse β (gaussianInterpMap (ι := ι) t p)) (μX.prod μY) := by
+  classical
+  let c : ℝ := Real.log (Fintype.card ι) / β
+  let bound : (ι → ℝ) × (ι → ℝ) → ℝ := fun p =>
+    (Finset.univ.sum fun i =>
+      Real.sqrt (1 - t) * |p.1 i| + Real.sqrt t * |p.2 i|) + c
+  have hbound_int : Integrable bound (μX.prod μY) := by
+    refine (integrable_finset_sum (s := (Finset.univ : Finset ι)) fun i _ => ?_).add
+      (integrable_const c)
+    have hX :
+        Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.1 i|) (μX.prod μY) := by
+      simpa using (gaussian_integrable_coord μX i).abs.comp_fst μY
+    have hY :
+        Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.2 i|) (μX.prod μY) := by
+      simpa using (gaussian_integrable_coord μY i).abs.comp_snd μX
+    exact (hX.const_mul (Real.sqrt (1 - t))).add (hY.const_mul (Real.sqrt t))
+  refine Integrable.mono' hbound_int
+    (((measurable_lse β).comp (gaussianInterpMap (ι := ι) t).measurable).aestronglyMeasurable) ?_
+  exact ae_of_all (μX.prod μY) fun p => by
+    rw [Real.norm_eq_abs]
+    calc
+      |lse β (gaussianInterpMap (ι := ι) t p)|
+          ≤ (Finset.univ.sum fun i => |gaussianInterpMap (ι := ι) t p i|) + c := by
+            simpa [c] using abs_lse_le_sum_abs_add hβ (gaussianInterpMap (ι := ι) t p)
+      _ ≤ bound p := by
+        dsimp [bound]
+        have hsum :
+            (Finset.univ.sum fun i => |gaussianInterpMap (ι := ι) t p i|) ≤
+              Finset.univ.sum fun i =>
+                Real.sqrt (1 - t) * |p.1 i| + Real.sqrt t * |p.2 i| := by
+          refine Finset.sum_le_sum fun i _ => ?_
+          rw [gaussianInterpMap_apply]
+          calc
+            |Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i|
+                ≤ |Real.sqrt (1 - t) * p.1 i| + |Real.sqrt t * p.2 i| := abs_add_le _ _
+            _ = Real.sqrt (1 - t) * |p.1 i| + Real.sqrt t * |p.2 i| := by
+              rw [abs_mul, abs_mul, abs_of_nonneg (Real.sqrt_nonneg _),
+                abs_of_nonneg (Real.sqrt_nonneg _)]
+        simpa [add_comm] using add_le_add_right hsum c
+
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
 noncomputable def gaussianInterpMeasure
@@ -319,6 +364,15 @@ theorem hasDerivAt_gaussianInterpolationLSE_of_integrable
   · exact ae_of_all (μX.prod μY) fun p s hs =>
       gaussianInterpLSEDerivIntegrand_le_bound β ht hs p
   · exact integrable_gaussianInterpLSEDerivBound μX μY t
+
+theorem hasDerivAt_gaussianInterpolationLSE
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY] {β t : ℝ}
+    (hβ : 0 < β) (ht : t ∈ Set.Ioo (0 : ℝ) 1) :
+    HasDerivAt (gaussianInterpolationLSE μX μY β)
+      (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) t := by
+  exact hasDerivAt_gaussianInterpolationLSE_of_integrable μX μY hβ.ne' ht
+    (integrable_lse_gaussianInterpMap μX μY hβ t)
 
 @[simp]
 theorem gaussianInterpMap_zero
