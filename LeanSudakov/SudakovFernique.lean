@@ -10,7 +10,7 @@ import Mathlib.Probability.Moments.Variance
 
 open MeasureTheory
 open ProbabilityTheory
-open scoped BigOperators Topology
+open scoped BigOperators Topology ENNReal
 
 noncomputable section
 
@@ -284,6 +284,70 @@ theorem integrable_lse_gaussianInterpMap
               rw [abs_mul, abs_mul, abs_of_nonneg (Real.sqrt_nonneg _),
                 abs_of_nonneg (Real.sqrt_nonneg _)]
         simpa [add_comm] using add_le_add_right hsum c
+
+theorem memLp_top_softmax_gaussianInterpMap
+    {ι : Type*} [Fintype ι]
+    (μ : Measure ((ι → ℝ) × (ι → ℝ))) (β t : ℝ) (i : ι) :
+    MemLp (fun p : (ι → ℝ) × (ι → ℝ) =>
+      softmax β (gaussianInterpMap (ι := ι) t p) i) ∞ μ := by
+  refine memLp_top_of_bound
+    (((continuous_softmax β i).comp (gaussianInterpMap (ι := ι) t).continuous).aestronglyMeasurable)
+    1 ?_
+  exact ae_of_all μ fun p => by
+    simpa [Real.norm_eq_abs] using
+      abs_softmax_le_one β (gaussianInterpMap (ι := ι) t p) i
+
+theorem integrable_gaussianInterpMap_coord_mul_softmax
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (β t : ℝ) (i : ι) :
+    Integrable
+      (fun p : (ι → ℝ) × (ι → ℝ) =>
+        p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i)
+      (μX.prod μY) ∧
+    Integrable
+      (fun p : (ι → ℝ) × (ι → ℝ) =>
+        p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i)
+      (μX.prod μY) := by
+  constructor
+  · exact ((gaussian_integrable_coord μX i).comp_fst μY).mul_of_top_left
+      (memLp_top_softmax_gaussianInterpMap (μX.prod μY) β t i)
+  · exact ((gaussian_integrable_coord μY i).comp_snd μX).mul_of_top_left
+      (memLp_top_softmax_gaussianInterpMap (μX.prod μY) β t i)
+
+theorem integral_gaussianInterpLSEDerivIntegrand_eq_endpoint_terms
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (β t : ℝ) :
+    (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) =
+      Finset.univ.sum fun i =>
+        (1 / (2 * Real.sqrt t)) *
+            (∫ p : (ι → ℝ) × (ι → ℝ),
+              p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) -
+          (1 / (2 * Real.sqrt (1 - t))) *
+            (∫ p : (ι → ℝ) × (ι → ℝ),
+              p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) := by
+  classical
+  simp only [gaussianInterpLSEDerivIntegrand]
+  rw [integral_finset_sum]
+  · refine Finset.sum_congr rfl fun i _ => ?_
+    have hX := (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).1
+    have hY := (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).2
+    rw [← integral_const_mul, ← integral_const_mul, ← integral_sub
+      (hY.const_mul (1 / (2 * Real.sqrt t)))
+      (hX.const_mul (1 / (2 * Real.sqrt (1 - t))))]
+    refine integral_congr_ae ?_
+    exact ae_of_all (μX.prod μY) fun p => by
+      simp
+      ring_nf
+  · intro i _
+    have hX := (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).1
+    have hY := (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).2
+    convert (hY.const_mul (1 / (2 * Real.sqrt t))).sub
+      (hX.const_mul (1 / (2 * Real.sqrt (1 - t)))) using 1
+    ext p
+    simp
+    ring_nf
 
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
