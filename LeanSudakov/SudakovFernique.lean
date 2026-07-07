@@ -349,6 +349,71 @@ theorem integral_gaussianInterpLSEDerivIntegrand_eq_endpoint_terms
     simp
     ring_nf
 
+noncomputable def softmaxHessianTerm
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (β : ℝ) (z : ι → ℝ) (i j : ι) : ℝ :=
+  β * ((if i = j then softmax β z i else 0) - softmax β z i * softmax β z j)
+
+noncomputable def softmaxHessianCovRow
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μ : Measure (ι → ℝ)) (β : ℝ) (z : ι → ℝ) (i : ι) : ℝ :=
+  Finset.univ.sum fun j => softmaxHessianTerm β z i j * gaussianCov μ i j
+
+noncomputable def softmaxHessianCovDiffSum
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) (β : ℝ) (z : ι → ℝ) : ℝ :=
+  Finset.univ.sum fun i =>
+    Finset.univ.sum fun j =>
+      softmaxHessianTerm β z i j * (gaussianCov μY i j - gaussianCov μX i j)
+
+theorem softmaxHessianCovRow_sub
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) (β : ℝ) (z : ι → ℝ) (i : ι) :
+    softmaxHessianCovRow μY β z i - softmaxHessianCovRow μX β z i =
+      Finset.univ.sum fun j =>
+        softmaxHessianTerm β z i j * (gaussianCov μY i j - gaussianCov μX i j) := by
+  rw [softmaxHessianCovRow, softmaxHessianCovRow, ← Finset.sum_sub_distrib]
+  refine Finset.sum_congr rfl fun j _ => ?_
+  ring
+
+theorem softmaxHessianCovDiffSum_eq
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) (β : ℝ) (z : ι → ℝ) :
+    softmaxHessianCovDiffSum μX μY β z =
+      Finset.univ.sum fun i =>
+        Finset.univ.sum fun j =>
+          β * ((if i = j then softmax β z i else 0) -
+            softmax β z i * softmax β z j) *
+              (gaussianCov μY i j - gaussianCov μX i j) := by
+  simp [softmaxHessianCovDiffSum, softmaxHessianTerm]
+
+theorem integrable_softmaxHessianCovRow
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (ν : Measure (ι → ℝ)) [IsFiniteMeasure ν]
+    (μ : Measure (ι → ℝ)) (β : ℝ) (i : ι) :
+    Integrable (fun z : ι → ℝ => softmaxHessianCovRow μ β z i) ν := by
+  classical
+  refine integrable_finset_sum (s := (Finset.univ : Finset ι)) fun j _ => ?_
+  convert (integrable_softmax_deriv_term ν β i j).const_mul (gaussianCov μ i j) using 1
+  ext z
+  simp [softmaxHessianTerm, mul_comm, mul_left_comm]
+
+theorem integrable_softmaxHessianCovDiffSum
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (ν : Measure (ι → ℝ)) [IsFiniteMeasure ν]
+    (μX μY : Measure (ι → ℝ)) (β : ℝ) :
+    Integrable (fun z : ι → ℝ => softmaxHessianCovDiffSum μX μY β z) ν := by
+  classical
+  refine integrable_finset_sum (s := (Finset.univ : Finset ι)) fun i _ => ?_
+  rw [show (fun z : ι → ℝ =>
+        Finset.univ.sum fun j =>
+          softmaxHessianTerm β z i j * (gaussianCov μY i j - gaussianCov μX i j)) =
+      fun z => softmaxHessianCovRow μY β z i - softmaxHessianCovRow μX β z i by
+    funext z
+    rw [softmaxHessianCovRow_sub]]
+  exact (integrable_softmaxHessianCovRow ν μY β i).sub
+    (integrable_softmaxHessianCovRow ν μX β i)
+
 /-- The Gaussian interpolation measure, realized as a linear image of the independent product
 coupling of the endpoint laws. -/
 noncomputable def gaussianInterpMeasure
@@ -359,6 +424,93 @@ noncomputable def gaussianInterpMeasure
 noncomputable def gaussianInterpolationLSE
     {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ)) (β t : ℝ) : ℝ :=
   ∫ z, lse β z ∂gaussianInterpMeasure μX μY t
+
+theorem integral_gaussianInterpLSEDerivIntegrand_eq_hessian_of_endpoint_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (β t : ℝ)
+    (hYstein : ∀ i,
+      (1 / (2 * Real.sqrt t)) *
+          (∫ p : (ι → ℝ) × (ι → ℝ),
+            p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+        (1 / 2) *
+          ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t)
+    (hXstein : ∀ i,
+      (1 / (2 * Real.sqrt (1 - t))) *
+          (∫ p : (ι → ℝ) × (ι → ℝ),
+            p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+        (1 / 2) *
+          ∫ z, softmaxHessianCovRow μX β z i ∂gaussianInterpMeasure μX μY t) :
+    (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) =
+      (1 / 2) *
+        ∫ z, softmaxHessianCovDiffSum μX μY β z ∂gaussianInterpMeasure μX μY t := by
+  classical
+  let ν : Measure (ι → ℝ) := gaussianInterpMeasure μX μY t
+  haveI : IsFiniteMeasure ν := by
+    dsimp [ν, gaussianInterpMeasure]
+    infer_instance
+  rw [integral_gaussianInterpLSEDerivIntegrand_eq_endpoint_terms μX μY β t]
+  calc
+    (Finset.univ.sum fun i =>
+        (1 / (2 * Real.sqrt t)) *
+            (∫ p : (ι → ℝ) × (ι → ℝ),
+              p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) -
+          (1 / (2 * Real.sqrt (1 - t))) *
+            (∫ p : (ι → ℝ) × (ι → ℝ),
+              p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY))
+        = Finset.univ.sum fun i =>
+            (1 / 2) * ∫ z, softmaxHessianCovRow μY β z i ∂ν -
+              (1 / 2) * ∫ z, softmaxHessianCovRow μX β z i ∂ν := by
+          refine Finset.sum_congr rfl fun i _ => ?_
+          dsimp [ν]
+          rw [hYstein i, hXstein i]
+    _ = (1 / 2) *
+          Finset.univ.sum fun i =>
+            (∫ z, softmaxHessianCovRow μY β z i ∂ν) -
+              (∫ z, softmaxHessianCovRow μX β z i ∂ν) := by
+          rw [Finset.mul_sum]
+          refine Finset.sum_congr rfl fun i _ => ?_
+          ring
+    _ = (1 / 2) *
+          Finset.univ.sum fun i =>
+            ∫ z, softmaxHessianCovRow μY β z i - softmaxHessianCovRow μX β z i ∂ν := by
+          congr 1
+          refine Finset.sum_congr rfl fun i _ => ?_
+          rw [integral_sub
+            (integrable_softmaxHessianCovRow ν μY β i)
+            (integrable_softmaxHessianCovRow ν μX β i)]
+    _ = (1 / 2) *
+          Finset.univ.sum fun i =>
+            ∫ z, (Finset.univ.sum fun j =>
+              softmaxHessianTerm β z i j * (gaussianCov μY i j - gaussianCov μX i j)) ∂ν := by
+          congr 1
+          refine Finset.sum_congr rfl fun i _ => ?_
+          refine integral_congr_ae ?_
+          exact ae_of_all ν fun z => softmaxHessianCovRow_sub μX μY β z i
+    _ = (1 / 2) *
+          ∫ z, softmaxHessianCovDiffSum μX μY β z ∂ν := by
+          change (1 / 2) *
+              Finset.univ.sum (fun i =>
+                ∫ z, (Finset.univ.sum fun j =>
+                  softmaxHessianTerm β z i j *
+                    (gaussianCov μY i j - gaussianCov μX i j)) ∂ν) =
+            (1 / 2) *
+              ∫ z, (Finset.univ.sum fun i =>
+                Finset.univ.sum fun j =>
+                  softmaxHessianTerm β z i j *
+                    (gaussianCov μY i j - gaussianCov μX i j)) ∂ν
+          rw [integral_finset_sum]
+          · intro i _
+            rw [show (fun z : ι → ℝ =>
+                  Finset.univ.sum fun j =>
+                    softmaxHessianTerm β z i j *
+                      (gaussianCov μY i j - gaussianCov μX i j)) =
+                fun z => softmaxHessianCovRow μY β z i - softmaxHessianCovRow μX β z i by
+              funext z
+              rw [softmaxHessianCovRow_sub]]
+            exact (integrable_softmaxHessianCovRow ν μY β i).sub
+              (integrable_softmaxHessianCovRow ν μX β i)
 
 /-- Differentiating the Gaussian interpolation log-sum-exp functional under the product integral,
 assuming a local dominated-derivative bound.
@@ -781,6 +933,50 @@ theorem gaussian_interpolation_lse_mono_of_integrand_formula
   intro t ht
   rw [deriv_gaussianInterpolationLSE_eq_integral μX μY hβ ht]
   exact hintegrand t ht
+
+theorem gaussian_interpolation_lse_mono_of_endpoint_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β)
+    (hFcont : ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1))
+    (hYstein : ∀ t ∈ Set.Ioo (0 : ℝ) 1, ∀ i,
+      (1 / (2 * Real.sqrt t)) *
+          (∫ p : (ι → ℝ) × (ι → ℝ),
+            p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+        (1 / 2) *
+          ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t)
+    (hXstein : ∀ t ∈ Set.Ioo (0 : ℝ) 1, ∀ i,
+      (1 / (2 * Real.sqrt (1 - t))) *
+          (∫ p : (ι → ℝ) × (ι → ℝ),
+            p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+        (1 / 2) *
+          ∫ z, softmaxHessianCovRow μX β z i ∂gaussianInterpMeasure μX μY t) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY := by
+  refine gaussian_interpolation_lse_mono_of_integrand_formula μX μY hinc hβ hFcont ?_
+  intro t ht
+  calc
+    (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY)
+        = (1 / 2) *
+            ∫ z, softmaxHessianCovDiffSum μX μY β z ∂gaussianInterpMeasure μX μY t := by
+          exact integral_gaussianInterpLSEDerivIntegrand_eq_hessian_of_endpoint_stein
+            μX μY β t (hYstein t ht) (hXstein t ht)
+    _ = (1 / 2) *
+          ∫ z,
+            (Finset.univ.sum fun i =>
+              Finset.univ.sum fun j =>
+                β * ((if i = j then softmax β z i else 0) -
+                  softmax β z i * softmax β z j) *
+                    (gaussianCov μY i j - gaussianCov μX i j))
+            ∂gaussianInterpMeasure μX μY t := by
+          apply congrArg (fun r => (1 / 2) * r)
+          refine integral_congr_ae ?_
+          exact ae_of_all (gaussianInterpMeasure μX μY t) fun z =>
+            softmaxHessianCovDiffSum_eq μX μY β z
 
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
