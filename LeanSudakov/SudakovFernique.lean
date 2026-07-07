@@ -692,6 +692,32 @@ theorem gaussian_interpolation_lse_mono_of_deriv_formula'
   gaussian_interpolation_lse_mono_of_deriv_formula μX μY hinc hβ hFcont
     (differentiableOn_gaussianInterpolationLSE μX μY hβ) hderiv
 
+theorem gaussian_interpolation_lse_mono_of_integrand_formula
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β)
+    (hFcont : ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1))
+    (hintegrand : ∀ t ∈ Set.Ioo (0 : ℝ) 1,
+      (∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY) =
+        (1 / 2) *
+          ∫ z,
+            (Finset.univ.sum fun i =>
+              Finset.univ.sum fun j =>
+                β * ((if i = j then softmax β z i else 0) -
+                  softmax β z i * softmax β z j) *
+                    (gaussianCov μY i j - gaussianCov μX i j))
+            ∂gaussianInterpMeasure μX μY t) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY := by
+  refine gaussian_interpolation_lse_mono_of_deriv_formula' μX μY hinc hβ hFcont ?_
+  intro t ht
+  rw [deriv_gaussianInterpolationLSE_eq_integral μX μY hβ ht]
+  exact hintegrand t ht
+
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
     (h : ∀ β : ℝ, 0 < β → a ≤ b + c / β) :
