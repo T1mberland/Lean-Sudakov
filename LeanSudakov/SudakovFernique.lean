@@ -374,6 +374,24 @@ theorem hasDerivAt_gaussianInterpolationLSE
   exact hasDerivAt_gaussianInterpolationLSE_of_integrable μX μY hβ.ne' ht
     (integrable_lse_gaussianInterpMap μX μY hβ t)
 
+theorem deriv_gaussianInterpolationLSE_eq_integral
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY] {β t : ℝ}
+    (hβ : 0 < β) (ht : t ∈ Set.Ioo (0 : ℝ) 1) :
+    deriv (gaussianInterpolationLSE μX μY β) t =
+      ∫ p, gaussianInterpLSEDerivIntegrand (ι := ι) β t p ∂μX.prod μY := by
+  exact (hasDerivAt_gaussianInterpolationLSE μX μY hβ ht).deriv
+
+theorem differentiableOn_gaussianInterpolationLSE
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY] {β : ℝ}
+    (hβ : 0 < β) :
+    DifferentiableOn ℝ (gaussianInterpolationLSE μX μY β)
+      (interior (Set.Icc (0 : ℝ) 1)) := by
+  intro t ht
+  have ht' : t ∈ Set.Ioo (0 : ℝ) 1 := by simpa using ht
+  exact (hasDerivAt_gaussianInterpolationLSE μX μY hβ ht').differentiableAt.differentiableWithinAt
+
 @[simp]
 theorem gaussianInterpMap_zero
     {ι : Type*} :
@@ -423,6 +441,52 @@ theorem gaussianInterpolationLSE_one
     [IsProbabilityMeasure μX] [IsProbabilityMeasure μY] (β : ℝ) :
     gaussianInterpolationLSE μX μY β 1 = ∫ y, lse β y ∂μY := by
   simp [gaussianInterpolationLSE]
+
+theorem gaussianInterpMeasure_centered
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (t : ℝ) (i : ι) :
+    ∫ z, z i ∂gaussianInterpMeasure μX μY t = 0 := by
+  classical
+  let μ : Measure ((ι → ℝ) × (ι → ℝ)) := μX.prod μY
+  have hXint :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) => p.1 i) μ := by
+    simpa [μ, coordCLM] using (gaussian_integrable_coord μX i).comp_fst μY
+  have hYint :
+      Integrable (fun p : (ι → ℝ) × (ι → ℝ) => p.2 i) μ := by
+    simpa [μ, coordCLM] using (gaussian_integrable_coord μY i).comp_snd μX
+  have hXprod : ∫ p : (ι → ℝ) × (ι → ℝ), p.1 i ∂μ = 0 := by
+    have hmap :
+        ∫ x, x i ∂Measure.map Prod.fst μ =
+          ∫ p : (ι → ℝ) × (ι → ℝ), p.1 i ∂μ := by
+      rw [integral_map]
+      · exact measurable_fst.aemeasurable
+      · exact (measurable_pi_apply i).aestronglyMeasurable
+    dsimp [μ] at hmap
+    rw [Measure.map_fst_prod] at hmap
+    simpa [measure_univ, hX0 i] using hmap.symm
+  have hYprod : ∫ p : (ι → ℝ) × (ι → ℝ), p.2 i ∂μ = 0 := by
+    have hmap :
+        ∫ y, y i ∂Measure.map Prod.snd μ =
+          ∫ p : (ι → ℝ) × (ι → ℝ), p.2 i ∂μ := by
+      rw [integral_map]
+      · exact measurable_snd.aemeasurable
+      · exact (measurable_pi_apply i).aestronglyMeasurable
+    dsimp [μ] at hmap
+    rw [Measure.map_snd_prod] at hmap
+    simpa [measure_univ, hY0 i] using hmap.symm
+  rw [gaussianInterpMeasure, integral_map]
+  · change
+      ∫ p : (ι → ℝ) × (ι → ℝ),
+        Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i ∂μ = 0
+    rw [integral_add (hXint.const_mul _) (hYint.const_mul _)]
+    rw [integral_const_mul, integral_const_mul, hXprod, hYprod]
+    simp
+  · exact (gaussianInterpMap (ι := ι) t).measurable.aemeasurable
+  · exact (measurable_pi_apply i).aestronglyMeasurable
 
 /-- Coordinate covariance of the interpolation law, before simplifying the square roots.
 
@@ -603,6 +667,30 @@ theorem gaussian_interpolation_lse_mono_of_deriv_formula
     · norm_num
     · exact integral_nonneg fun z =>
         softmax_hessian_cov_contraction_nonneg_of_variance_le μX μY hinc hβ.le z
+
+theorem gaussian_interpolation_lse_mono_of_deriv_formula'
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β)
+    (hFcont : ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1))
+    (hderiv : ∀ t ∈ Set.Ioo (0 : ℝ) 1,
+      deriv (gaussianInterpolationLSE μX μY β) t =
+        (1 / 2) *
+          ∫ z,
+            (Finset.univ.sum fun i =>
+              Finset.univ.sum fun j =>
+                β * ((if i = j then softmax β z i else 0) -
+                  softmax β z i * softmax β z j) *
+                    (gaussianCov μY i j - gaussianCov μX i j))
+            ∂gaussianInterpMeasure μX μY t) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY :=
+  gaussian_interpolation_lse_mono_of_deriv_formula μX μY hinc hβ hFcont
+    (differentiableOn_gaussianInterpolationLSE μX μY hβ) hderiv
 
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
