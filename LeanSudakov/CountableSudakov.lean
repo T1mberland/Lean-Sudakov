@@ -261,6 +261,29 @@ theorem countable_sudakov_finite_comparison_of_projected_gaussian
     integral_vecMax_finset_restrict_map μY s hs] at hfinite
   exact hfinite
 
+theorem integrable_coord_of_projected_gaussian
+    {ι : Type*} [DecidableEq ι] (μ : Measure (ι → ℝ))
+    (hgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μ.map (s.restrict (π := fun _ => ℝ))))
+    (i : ι) :
+    Integrable (fun x : ι → ℝ => x i) μ := by
+  classical
+  let s : Finset ι := {i}
+  let hs : s.Nonempty := Finset.singleton_nonempty i
+  let idx : {j // j ∈ s} := ⟨i, by simp [s]⟩
+  let ν : Measure ({j // j ∈ s} → ℝ) := μ.map (s.restrict (π := fun _ => ℝ))
+  have hproj_meas :
+      AEMeasurable (s.restrict (π := fun _ => ℝ)) μ :=
+    (Finset.measurable_restrict (X := fun _ : ι => ℝ) s).aemeasurable
+  letI : ProbabilityTheory.IsGaussian ν := by
+    simpa [ν, s, hs] using hgauss s hs
+  have hcoord : Integrable (fun z : {j // j ∈ s} → ℝ => z idx) ν := by
+    simpa [coordCLM] using IsGaussian.integrable_dual ν (coordCLM idx)
+  have hcomp : Integrable ((fun z : {j // j ∈ s} → ℝ => z idx) ∘
+      (s.restrict (π := fun _ => ℝ))) μ :=
+    (integrable_map_measure hcoord.aestronglyMeasurable hproj_meas).1 hcoord
+  simpa [Function.comp_def, Finset.restrict, s, idx] using hcomp
+
 /-- Countable Sudakov-Fernique extension from all finite nonempty max comparisons.
 
 For countably many indices, mathlib currently cannot state Gaussianity directly on the product
@@ -316,5 +339,30 @@ theorem countable_sudakov_of_projected_gaussian
   intro s hs
   exact countable_sudakov_finite_comparison_of_projected_gaussian
     μX μY hXgauss hYgauss hX0 hY0 hinc s hs
+
+/-- Countable Sudakov-Fernique from Gaussian finite-dimensional projection laws, with coordinate
+integrability derived from the singleton projected laws. -/
+theorem countable_sudakov_of_projected_gaussian'
+    {ι : Type*} [Countable ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    (hXgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μX.map (s.restrict (π := fun _ => ℝ))))
+    (hYgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μY.map (s.restrict (π := fun _ => ℝ))))
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
+      ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY)
+    (hXbdd : ∀ᵐ x ∂μX, BddAbove (Set.range x))
+    (hYbdd : ∀ᵐ y ∂μY, BddAbove (Set.range y))
+    (hXint : Integrable (fun x : ι → ℝ => countableSup x) μX)
+    (hYint : Integrable (fun y : ι → ℝ => countableSup y) μY) :
+    ∫ x, countableSup x ∂μX ≤ ∫ y, countableSup y ∂μY := by
+  exact countable_sudakov_of_projected_gaussian μX μY hXgauss hYgauss hX0 hY0 hinc
+    (integrable_coord_of_projected_gaussian μX hXgauss)
+    (integrable_coord_of_projected_gaussian μY hYgauss)
+    hXbdd hYbdd hXint hYint
 
 end
