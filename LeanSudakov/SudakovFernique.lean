@@ -285,6 +285,86 @@ theorem integrable_lse_gaussianInterpMap
                 abs_of_nonneg (Real.sqrt_nonneg _)]
         simpa [add_comm] using add_le_add_right hsum c
 
+theorem continuous_lse
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (β : ℝ) :
+    Continuous fun x : ι → ℝ => lse β x := by
+  classical
+  rw [continuous_iff_continuousAt]
+  intro x
+  let S : (ι → ℝ) → ℝ := fun x =>
+    (Finset.univ).sum fun i => Real.exp (β * x i)
+  have hSpos : 0 < S x := by
+    let i : ι := Classical.choice inferInstance
+    exact lt_of_lt_of_le (Real.exp_pos (β * x i)) <|
+      Finset.single_le_sum
+        (s := (Finset.univ : Finset ι))
+        (f := fun i => Real.exp (β * x i))
+        (fun _ _ => Real.exp_nonneg _) (Finset.mem_univ i)
+  have hScont : Continuous S := by
+    exact continuous_finset_sum Finset.univ fun i _ =>
+      Real.continuous_exp.comp (continuous_const.mul (continuous_apply i))
+  change ContinuousAt (fun x : ι → ℝ => Real.log (S x) / β) x
+  exact ((Real.continuousAt_log hSpos.ne').comp hScont.continuousAt).div_const β
+
+noncomputable def gaussianInterpLSEBound
+    {ι : Type*} [Fintype ι] (β : ℝ) (p : (ι → ℝ) × (ι → ℝ)) : ℝ :=
+  (Finset.univ.sum fun i => |p.1 i| + |p.2 i|) + Real.log (Fintype.card ι) / β
+
+theorem integrable_gaussianInterpLSEBound
+    {ι : Type*} [Fintype ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    (β : ℝ) :
+    Integrable (gaussianInterpLSEBound (ι := ι) β) (μX.prod μY) := by
+  classical
+  refine (integrable_finset_sum (s := (Finset.univ : Finset ι)) fun i _ => ?_).add
+    (integrable_const _)
+  have hX : Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.1 i|) (μX.prod μY) := by
+    simpa using (gaussian_integrable_coord μX i).abs.comp_fst μY
+  have hY : Integrable (fun p : (ι → ℝ) × (ι → ℝ) => |p.2 i|) (μX.prod μY) := by
+    simpa using (gaussian_integrable_coord μY i).abs.comp_snd μX
+  exact hX.add hY
+
+theorem norm_lse_gaussianInterpMap_le_bound_of_mem_Icc
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β t : ℝ} (hβ : 0 < β) (ht : t ∈ Set.Icc (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    ‖lse β (gaussianInterpMap (ι := ι) t p)‖ ≤
+      gaussianInterpLSEBound (ι := ι) β p := by
+  classical
+  rw [Real.norm_eq_abs]
+  calc
+    |lse β (gaussianInterpMap (ι := ι) t p)|
+        ≤ (Finset.univ.sum fun i => |gaussianInterpMap (ι := ι) t p i|) +
+            Real.log (Fintype.card ι) / β := by
+          exact abs_lse_le_sum_abs_add hβ (gaussianInterpMap (ι := ι) t p)
+    _ ≤ gaussianInterpLSEBound (ι := ι) β p := by
+      dsimp [gaussianInterpLSEBound]
+      have hsum :
+          (Finset.univ.sum fun i => |gaussianInterpMap (ι := ι) t p i|) ≤
+            Finset.univ.sum fun i => |p.1 i| + |p.2 i| := by
+        refine Finset.sum_le_sum fun i _ => ?_
+        rw [gaussianInterpMap_apply]
+        have ht0 : 0 ≤ t := ht.1
+        have ht1 : t ≤ 1 := ht.2
+        have hsqrt_t_le : Real.sqrt t ≤ 1 := by
+          rw [Real.sqrt_le_one]
+          exact ht1
+        have hsqrt_1t_le : Real.sqrt (1 - t) ≤ 1 := by
+          rw [Real.sqrt_le_one]
+          linarith
+        calc
+          |Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i|
+              ≤ |Real.sqrt (1 - t) * p.1 i| + |Real.sqrt t * p.2 i| := abs_add_le _ _
+          _ = Real.sqrt (1 - t) * |p.1 i| + Real.sqrt t * |p.2 i| := by
+            rw [abs_mul, abs_mul, abs_of_nonneg (Real.sqrt_nonneg _),
+              abs_of_nonneg (Real.sqrt_nonneg _)]
+          _ ≤ 1 * |p.1 i| + 1 * |p.2 i| := by
+            gcongr
+          _ = |p.1 i| + |p.2 i| := by ring
+      simpa [add_comm, add_left_comm, add_assoc] using
+        add_le_add_right hsum (Real.log (Fintype.card ι) / β)
+
 theorem memLp_top_softmax_gaussianInterpMap
     {ι : Type*} [Fintype ι]
     (μ : Measure ((ι → ℝ) × (ι → ℝ))) (β t : ℝ) (i : ι) :
@@ -424,6 +504,40 @@ noncomputable def gaussianInterpMeasure
 noncomputable def gaussianInterpolationLSE
     {ι : Type*} [Fintype ι] (μX μY : Measure (ι → ℝ)) (β t : ℝ) : ℝ :=
   ∫ z, lse β z ∂gaussianInterpMeasure μX μY t
+
+theorem continuousOn_gaussianInterpolationLSE
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ)) [IsGaussian μX] [IsGaussian μY]
+    {β : ℝ} (hβ : 0 < β) :
+    ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1) := by
+  classical
+  let μ : Measure ((ι → ℝ) × (ι → ℝ)) := μX.prod μY
+  let F : ℝ → ((ι → ℝ) × (ι → ℝ)) → ℝ := fun t p =>
+    lse β (gaussianInterpMap (ι := ι) t p)
+  have hmain : ContinuousOn (fun t => ∫ p, F t p ∂μ) (Set.Icc (0 : ℝ) 1) := by
+    refine continuousOn_of_dominated
+      (μ := μ) (F := F) (bound := gaussianInterpLSEBound (ι := ι) β)
+      ?_ ?_ (integrable_gaussianInterpLSEBound μX μY β) ?_
+    · intro t ht
+      exact ((measurable_lse β).comp (gaussianInterpMap (ι := ι) t).measurable).aestronglyMeasurable
+    · intro t ht
+      exact ae_of_all μ fun p => norm_lse_gaussianInterpMap_le_bound_of_mem_Icc hβ ht p
+    · exact ae_of_all μ fun p => by
+        have hpath : Continuous fun t : ℝ => gaussianInterpMap (ι := ι) t p := by
+          refine continuous_pi fun i => ?_
+          rw [show (fun t : ℝ => gaussianInterpMap (ι := ι) t p i) =
+              fun t => Real.sqrt (1 - t) * p.1 i + Real.sqrt t * p.2 i by
+            ext t
+            rw [gaussianInterpMap_apply]]
+          exact ((Real.continuous_sqrt.comp (continuous_const.sub continuous_id)).mul
+            continuous_const).add ((Real.continuous_sqrt.comp continuous_id).mul continuous_const)
+        exact ((continuous_lse β).comp hpath).continuousOn
+  convert hmain using 1
+  ext t
+  rw [gaussianInterpolationLSE, gaussianInterpMeasure]
+  rw [integral_map]
+  · exact (gaussianInterpMap (ι := ι) t).measurable.aemeasurable
+  · exact (measurable_lse β).aestronglyMeasurable
 
 theorem integral_gaussianInterpLSEDerivIntegrand_eq_hessian_of_endpoint_stein
     {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
@@ -1545,6 +1659,21 @@ theorem gaussian_interpolation_lse_mono_of_continuous
   · intro t ht i
     exact product_x_endpoint_stein μX μY hX0 β ht i
 
+theorem gaussian_interpolation_lse_mono
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY :=
+  gaussian_interpolation_lse_mono_of_continuous μX μY hX0 hY0 hinc hβ
+    (continuousOn_gaussianInterpolationLSE μX μY hβ)
+
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
     (h : ∀ β : ℝ, 0 < β → a ≤ b + c / β) :
@@ -1609,31 +1738,23 @@ theorem sudakov_fernique_of_lse_mono
       rw [integral_add hmaxY_int (integrable_const _), integral_const]
       simp
 
-/-- Gaussian-shaped finite Sudakov-Fernique statement, reduced to the still-missing
-Gaussian interpolation monotonicity for `lse`.
-
-Once `gaussian_interpolation_lse_mono` is available, `hlse_mono` should be discharged by that
-lemma. The integrability hypotheses in `sudakov_fernique_of_lse_mono` are discharged by the
-finite-dimensional Gaussian moment bounds in `GaussianVectorIBP`. -/
-theorem sudakov_fernique_of_gaussian_interpolation
+/-- Finite Sudakov-Fernique for centered Gaussian vectors, using the proved log-sum-exp
+interpolation monotonicity and then sending the inverse temperature to infinity. -/
+theorem sudakov_fernique
     {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
     (μX μY : Measure (ι → ℝ))
     [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
     [ProbabilityTheory.IsGaussian μX] [ProbabilityTheory.IsGaussian μY]
-    (_hX0 : ∀ i, ∫ x, x i ∂μX = 0)
-    (_hY0 : ∀ i, ∫ y, y i ∂μY = 0)
-    (_hinc : ∀ i j,
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
       ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX
-        ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY)
-    (hlse_mono : ∀ {β : ℝ}, 0 < β →
-      ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY) :
+        ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY) :
     ∫ x, vecMax x ∂μX ≤ ∫ y, vecMax y ∂μY := by
   exact sudakov_fernique_of_lse_mono μX μY
     (gaussian_integrable_vecMax μX) (gaussian_integrable_vecMax μY)
     (fun {_β} hβ => gaussian_integrable_lse μX hβ)
     (fun {_β} hβ => gaussian_integrable_lse μY hβ)
-    hlse_mono
-
--- TODO: Prove Gaussian interpolation for `lse`, then use it to remove `hlse_mono`.
+    (fun {_β} hβ => gaussian_interpolation_lse_mono μX μY hX0 hY0 hinc hβ)
 
 end
