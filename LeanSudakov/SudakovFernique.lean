@@ -744,6 +744,190 @@ theorem gaussianCov_map_scalarPiCLM
   rw [← gaussianCov_eq_covariance μ i j]
   ring
 
+theorem fixed_y_endpoint_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μY : Measure (ι → ℝ)) [IsGaussian μY]
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (β : ℝ) {t : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (x : ι → ℝ) (i : ι) :
+    (1 / (2 * Real.sqrt t)) *
+        (∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY) =
+      (1 / 2) *
+        ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+  classical
+  let a : ℝ := Real.sqrt t
+  let c : ι → ℝ := fun k => Real.sqrt (1 - t) * x k
+  let L : (ι → ℝ) →L[ℝ] (ι → ℝ) := scalarPiCLM (ι := ι) a
+  let ν : Measure (ι → ℝ) := Measure.map L μY
+  haveI : IsGaussian ν := by
+    dsimp [ν, L]
+    infer_instance
+  have hν0 : ∀ k, ∫ z, z k ∂ν = 0 := by
+    intro k
+    simpa [ν, L] using scalarPiCLM_map_centered μY hY0 a k
+  have ha_pos : 0 < a := by
+    dsimp [a]
+    exact Real.sqrt_pos.2 ht.1
+  have ha_ne : a ≠ 0 := ha_pos.ne'
+  have ht_sq : a ^ 2 = t := by
+    dsimp [a]
+    exact Real.sq_sqrt ht.1.le
+  have hstein := gaussian_ibp_softmax_affine ν hν0 β c i i
+  have hleft :
+      ∫ z, z i * softmax β (fun k => c k + z k) i ∂ν =
+        ∫ y, a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+    calc
+      ∫ z, z i * softmax β (fun k => c k + z k) i ∂ν
+          = ∫ y, L y i * softmax β (fun k => c k + L y k) i ∂μY := by
+            simpa [ν] using integral_map_linear_coord_mul_softmax_affine μY β c L i i
+      _ = ∫ y, a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+            refine integral_congr_ae ?_
+            exact ae_of_all μY fun y => by
+              have hz : (fun k => c k + L y k) = gaussianInterpMap (ι := ι) t (x, y) := by
+                ext k
+                change c k + L y k =
+                  Real.sqrt (1 - t) * x k + Real.sqrt t * y k
+                rw [scalarPiCLM_apply]
+              change L y i * softmax β (fun k => c k + L y k) i =
+                a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i
+              rw [hz]
+              have hLi : L y i = a * y i := by
+                change scalarPiCLM (ι := ι) a y i = a * y i
+                rw [scalarPiCLM_apply]
+              rw [hLi]
+  have hright :
+      (Finset.univ.sum fun k =>
+        gaussianCov ν i k *
+          ∫ z, β * ((if i = k then softmax β (fun r => c r + z r) i else 0) -
+            softmax β (fun r => c r + z r) i *
+              softmax β (fun r => c r + z r) k) ∂ν) =
+        t * ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+    change (Finset.univ.sum fun k =>
+        gaussianCov ν i k *
+          ∫ z, β * ((if i = k then softmax β (fun r => c r + z r) i else 0) -
+            softmax β (fun r => c r + z r) i *
+              softmax β (fun r => c r + z r) k) ∂ν) =
+      t * ∫ y, (Finset.univ.sum fun k =>
+        softmaxHessianTerm β (gaussianInterpMap (ι := ι) t (x, y)) i k *
+          gaussianCov μY i k) ∂μY
+    rw [integral_finset_sum]
+    · rw [Finset.mul_sum]
+      refine Finset.sum_congr rfl fun k _ => ?_
+      have hcov : gaussianCov ν i k = t * gaussianCov μY i k := by
+        calc
+          gaussianCov ν i k = a ^ 2 * gaussianCov μY i k := by
+            simpa [ν, L] using gaussianCov_map_scalarPiCLM μY a i k
+          _ = t * gaussianCov μY i k := by rw [ht_sq]
+      have hint :
+          ∫ z, β * ((if i = k then softmax β (fun r => c r + z r) i else 0) -
+              softmax β (fun r => c r + z r) i *
+                softmax β (fun r => c r + z r) k) ∂ν =
+            ∫ y, β * ((if i = k then
+                softmax β (gaussianInterpMap (ι := ι) t (x, y)) i else 0) -
+              softmax β (gaussianInterpMap (ι := ι) t (x, y)) i *
+                softmax β (gaussianInterpMap (ι := ι) t (x, y)) k) ∂μY := by
+        calc
+          ∫ z, β * ((if i = k then softmax β (fun r => c r + z r) i else 0) -
+              softmax β (fun r => c r + z r) i *
+                softmax β (fun r => c r + z r) k) ∂ν
+              = ∫ y, β * ((if i = k then softmax β (fun r => c r + L y r) i else 0) -
+                  softmax β (fun r => c r + L y r) i *
+                    softmax β (fun r => c r + L y r) k) ∂μY := by
+                simpa [ν] using integral_map_linear_softmax_affine_deriv_term μY β c L i k
+          _ = ∫ y, β * ((if i = k then
+                softmax β (gaussianInterpMap (ι := ι) t (x, y)) i else 0) -
+              softmax β (gaussianInterpMap (ι := ι) t (x, y)) i *
+                softmax β (gaussianInterpMap (ι := ι) t (x, y)) k) ∂μY := by
+                refine integral_congr_ae ?_
+                exact ae_of_all μY fun y => by
+                  have hz : (fun r => c r + L y r) =
+                      gaussianInterpMap (ι := ι) t (x, y) := by
+                    ext r
+                    change c r + L y r =
+                      Real.sqrt (1 - t) * x r + Real.sqrt t * y r
+                    rw [scalarPiCLM_apply]
+                  change β * ((if i = k then softmax β (fun r => c r + L y r) i else 0) -
+                      softmax β (fun r => c r + L y r) i *
+                        softmax β (fun r => c r + L y r) k) =
+                    β * ((if i = k then
+                        softmax β (gaussianInterpMap (ι := ι) t (x, y)) i else 0) -
+                        softmax β (gaussianInterpMap (ι := ι) t (x, y)) i *
+                        softmax β (gaussianInterpMap (ι := ι) t (x, y)) k)
+                  rw [hz]
+      have hterm :
+          ∫ y, softmaxHessianTerm β (gaussianInterpMap (ι := ι) t (x, y)) i k *
+              gaussianCov μY i k ∂μY =
+            gaussianCov μY i k *
+              ∫ y, β * ((if i = k then
+                  softmax β (gaussianInterpMap (ι := ι) t (x, y)) i else 0) -
+                softmax β (gaussianInterpMap (ι := ι) t (x, y)) i *
+                  softmax β (gaussianInterpMap (ι := ι) t (x, y)) k) ∂μY := by
+        rw [← integral_const_mul]
+        refine integral_congr_ae ?_
+        exact ae_of_all μY fun y => by
+          simp [softmaxHessianTerm]
+          ring
+      rw [hcov, hint, hterm]
+      ring
+    · intro k _
+      have hcont : Continuous fun y : ι → ℝ =>
+          softmaxHessianTerm β (gaussianInterpMap (ι := ι) t (x, y)) i k *
+            gaussianCov μY i k := by
+        exact ((continuous_softmax_deriv_term β i k).comp
+          ((gaussianInterpMap (ι := ι) t).continuous.comp
+            (Continuous.prodMk continuous_const continuous_id))).mul continuous_const
+      refine Integrable.of_bound hcont.aestronglyMeasurable (|gaussianCov μY i k| * (|β| * 2)) ?_
+      exact ae_of_all μY fun y => by
+        rw [Real.norm_eq_abs, abs_mul]
+        calc
+          |softmaxHessianTerm β (gaussianInterpMap (ι := ι) t (x, y)) i k| *
+              |gaussianCov μY i k|
+              ≤ (|β| * 2) * |gaussianCov μY i k| := by
+                exact mul_le_mul_of_nonneg_right
+                  (by
+                    simpa [softmaxHessianTerm] using
+                      abs_softmax_deriv_term_le β (gaussianInterpMap (ι := ι) t (x, y)) i k)
+                  (abs_nonneg _)
+          _ = |gaussianCov μY i k| * (|β| * 2) := by ring
+  have hmain :
+      ∫ y, a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY =
+        t * ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+    simpa [hleft, hright] using hstein
+  have hscale :
+      ∫ y, a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY =
+        a * ∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+    calc
+      ∫ y, a * y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY
+          = ∫ y, a * (y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i) ∂μY := by
+            refine integral_congr_ae ?_
+            exact ae_of_all μY fun y => by ring
+      _ = a * ∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+        rw [integral_const_mul]
+  rw [hscale] at hmain
+  have ht_eq : t = a * a := by
+    rw [← ht_sq]
+    ring
+  have hI :
+      (∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY) =
+        a * ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+    have hmain' :
+        a * (∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY) =
+          a * (a *
+            ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY) := by
+      rw [hmain, ht_eq]
+      ring
+    exact (mul_right_inj' ha_ne).mp hmain'
+  calc
+    (1 / (2 * Real.sqrt t)) *
+        (∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY)
+        = (1 / (2 * a)) *
+          (∫ y, y i * softmax β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY) := by
+          rfl
+    _ = (1 / 2) *
+        ∫ y, softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t (x, y)) i ∂μY := by
+      rw [hI]
+      field_simp [ha_ne]
+
 /-- Coordinate covariance of the interpolation law, before simplifying the square roots.
 
 The explicit `IsGaussian` assumption for the interpolation law avoids expensive typeclass search
