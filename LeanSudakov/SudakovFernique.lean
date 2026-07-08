@@ -704,6 +704,46 @@ theorem gaussianInterpMeasure_centered
   · exact (gaussianInterpMap (ι := ι) t).measurable.aemeasurable
   · exact (measurable_pi_apply i).aestronglyMeasurable
 
+noncomputable def scalarPiCLM
+    {ι : Type*} (a : ℝ) : (ι → ℝ) →L[ℝ] (ι → ℝ) :=
+  a • ContinuousLinearMap.id ℝ (ι → ℝ)
+
+@[simp]
+theorem scalarPiCLM_apply
+    {ι : Type*} (a : ℝ) (x : ι → ℝ) (i : ι) :
+    scalarPiCLM (ι := ι) a x i = a * x i := by
+  simp [scalarPiCLM, Pi.smul_apply, smul_eq_mul]
+
+theorem scalarPiCLM_map_centered
+    {ι : Type*} [Fintype ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ]
+    (hμ0 : ∀ i, ∫ x, x i ∂μ = 0)
+    (a : ℝ) (i : ι) :
+    ∫ z, z i ∂Measure.map (scalarPiCLM (ι := ι) a) μ = 0 := by
+  rw [integral_map]
+  · change ∫ x, a * x i ∂μ = 0
+    rw [integral_const_mul, hμ0 i]
+    simp
+  · exact (scalarPiCLM (ι := ι) a).measurable.aemeasurable
+  · exact (measurable_pi_apply i).aestronglyMeasurable
+
+theorem gaussianCov_map_scalarPiCLM
+    {ι : Type*} [Fintype ι]
+    (μ : Measure (ι → ℝ)) [IsGaussian μ] (a : ℝ) (i j : ι) :
+    gaussianCov (Measure.map (scalarPiCLM (ι := ι) a) μ) i j =
+      a ^ 2 * gaussianCov μ i j := by
+  let L := scalarPiCLM (ι := ι) a
+  rw [gaussianCov_eq_covariance]
+  rw [covariance_map_fun
+    (measurable_pi_apply i).aestronglyMeasurable
+    (measurable_pi_apply j).aestronglyMeasurable
+    L.measurable.aemeasurable]
+  change cov[(fun x : ι → ℝ => a * x i), (fun x : ι → ℝ => a * x j); μ] =
+    a ^ 2 * gaussianCov μ i j
+  rw [covariance_const_mul_left, covariance_const_mul_right]
+  rw [← gaussianCov_eq_covariance μ i j]
+  ring
+
 /-- Coordinate covariance of the interpolation law, before simplifying the square roots.
 
 The explicit `IsGaussian` assumption for the interpolation law avoids expensive typeclass search
