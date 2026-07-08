@@ -1200,6 +1200,58 @@ theorem product_y_endpoint_stein
         ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t := by
       rw [hmap]
 
+theorem product_x_endpoint_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (β : ℝ) {t : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1) (i : ι) :
+    (1 / (2 * Real.sqrt (1 - t))) *
+        (∫ p : (ι → ℝ) × (ι → ℝ),
+          p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+      (1 / 2) *
+        ∫ z, softmaxHessianCovRow μX β z i ∂gaussianInterpMeasure μX μY t := by
+  classical
+  let f : (ι → ℝ) × (ι → ℝ) → ℝ := fun p =>
+    p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i
+  let g : (ι → ℝ) × (ι → ℝ) → ℝ := fun p =>
+    softmaxHessianCovRow μX β (gaussianInterpMap (ι := ι) t p) i
+  have hf : Integrable f (μX.prod μY) := by
+    simpa [f] using (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).1
+  have hg : Integrable g (μX.prod μY) := by
+    simpa [g] using
+      integrable_softmaxHessianCovRow_gaussianInterpMap_prod μX μY μX β t i
+  haveI : IsFiniteMeasure (gaussianInterpMeasure μX μY t) := by
+    dsimp [gaussianInterpMeasure]
+    infer_instance
+  have hmap :
+      ∫ z, softmaxHessianCovRow μX β z i ∂gaussianInterpMeasure μX μY t =
+        ∫ p, g p ∂μX.prod μY := by
+    rw [gaussianInterpMeasure, integral_map]
+    · exact (gaussianInterpMap (ι := ι) t).measurable.aemeasurable
+    · exact (integrable_softmaxHessianCovRow
+        (gaussianInterpMeasure μX μY t) μX β i).aestronglyMeasurable
+  calc
+    (1 / (2 * Real.sqrt (1 - t))) *
+        (∫ p : (ι → ℝ) × (ι → ℝ),
+          p.1 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY)
+        = (1 / (2 * Real.sqrt (1 - t))) * ∫ p, f p ∂μX.prod μY := by rfl
+    _ = (1 / (2 * Real.sqrt (1 - t))) * ∫ y, ∫ x, f (x, y) ∂μX ∂μY := by
+      rw [integral_prod_symm f hf]
+    _ = ∫ y, (1 / (2 * Real.sqrt (1 - t))) * ∫ x, f (x, y) ∂μX ∂μY := by
+      rw [integral_const_mul]
+    _ = ∫ y, (1 / 2) * ∫ x, g (x, y) ∂μX ∂μY := by
+      refine integral_congr_ae ?_
+      exact ae_of_all μY fun y => by
+        simpa [f, g] using fixed_x_endpoint_stein μX hX0 β ht y i
+    _ = (1 / 2) * ∫ y, ∫ x, g (x, y) ∂μX ∂μY := by
+      rw [integral_const_mul]
+    _ = (1 / 2) * ∫ p, g p ∂μX.prod μY := by
+      rw [integral_prod_symm g hg]
+    _ = (1 / 2) *
+        ∫ z, softmaxHessianCovRow μX β z i ∂gaussianInterpMeasure μX μY t := by
+      rw [hmap]
+
 /-- Coordinate covariance of the interpolation law, before simplifying the square roots.
 
 The explicit `IsGaussian` assumption for the interpolation law avoids expensive typeclass search
