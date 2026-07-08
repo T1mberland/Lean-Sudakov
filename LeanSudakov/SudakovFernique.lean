@@ -1119,6 +1119,87 @@ theorem fixed_x_endpoint_stein
       rw [hI]
       field_simp [ha_ne]
 
+theorem integrable_softmaxHessianCovRow_gaussianInterpMap_prod
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY μ : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    (β t : ℝ) (i : ι) :
+    Integrable
+      (fun p : (ι → ℝ) × (ι → ℝ) =>
+        softmaxHessianCovRow μ β (gaussianInterpMap (ι := ι) t p) i)
+      (μX.prod μY) := by
+  classical
+  refine integrable_finset_sum (s := (Finset.univ : Finset ι)) fun k _ => ?_
+  have hcont : Continuous fun p : (ι → ℝ) × (ι → ℝ) =>
+      softmaxHessianTerm β (gaussianInterpMap (ι := ι) t p) i k *
+        gaussianCov μ i k := by
+    exact ((continuous_softmax_deriv_term β i k).comp
+      (gaussianInterpMap (ι := ι) t).continuous).mul continuous_const
+  refine Integrable.of_bound hcont.aestronglyMeasurable (|gaussianCov μ i k| * (|β| * 2)) ?_
+  exact ae_of_all (μX.prod μY) fun p => by
+    rw [Real.norm_eq_abs, abs_mul]
+    calc
+      |softmaxHessianTerm β (gaussianInterpMap (ι := ι) t p) i k| *
+          |gaussianCov μ i k|
+          ≤ (|β| * 2) * |gaussianCov μ i k| := by
+            exact mul_le_mul_of_nonneg_right
+              (by
+                simpa [softmaxHessianTerm] using
+                  abs_softmax_deriv_term_le β (gaussianInterpMap (ι := ι) t p) i k)
+              (abs_nonneg _)
+      _ = |gaussianCov μ i k| * (|β| * 2) := by ring
+
+theorem product_y_endpoint_stein
+    {ι : Type*} [Fintype ι] [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ)) [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (β : ℝ) {t : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1) (i : ι) :
+    (1 / (2 * Real.sqrt t)) *
+        (∫ p : (ι → ℝ) × (ι → ℝ),
+          p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY) =
+      (1 / 2) *
+        ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t := by
+  classical
+  let f : (ι → ℝ) × (ι → ℝ) → ℝ := fun p =>
+    p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i
+  let g : (ι → ℝ) × (ι → ℝ) → ℝ := fun p =>
+    softmaxHessianCovRow μY β (gaussianInterpMap (ι := ι) t p) i
+  have hf : Integrable f (μX.prod μY) := by
+    simpa [f] using (integrable_gaussianInterpMap_coord_mul_softmax μX μY β t i).2
+  have hg : Integrable g (μX.prod μY) := by
+    simpa [g] using
+      integrable_softmaxHessianCovRow_gaussianInterpMap_prod μX μY μY β t i
+  haveI : IsFiniteMeasure (gaussianInterpMeasure μX μY t) := by
+    dsimp [gaussianInterpMeasure]
+    infer_instance
+  have hmap :
+      ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t =
+        ∫ p, g p ∂μX.prod μY := by
+    rw [gaussianInterpMeasure, integral_map]
+    · exact (gaussianInterpMap (ι := ι) t).measurable.aemeasurable
+    · exact (integrable_softmaxHessianCovRow
+        (gaussianInterpMeasure μX μY t) μY β i).aestronglyMeasurable
+  calc
+    (1 / (2 * Real.sqrt t)) *
+        (∫ p : (ι → ℝ) × (ι → ℝ),
+          p.2 i * softmax β (gaussianInterpMap (ι := ι) t p) i ∂μX.prod μY)
+        = (1 / (2 * Real.sqrt t)) * ∫ p, f p ∂μX.prod μY := by rfl
+    _ = (1 / (2 * Real.sqrt t)) * ∫ x, ∫ y, f (x, y) ∂μY ∂μX := by
+      rw [integral_prod f hf]
+    _ = ∫ x, (1 / (2 * Real.sqrt t)) * ∫ y, f (x, y) ∂μY ∂μX := by
+      rw [integral_const_mul]
+    _ = ∫ x, (1 / 2) * ∫ y, g (x, y) ∂μY ∂μX := by
+      refine integral_congr_ae ?_
+      exact ae_of_all μX fun x => by
+        simpa [f, g] using fixed_y_endpoint_stein μY hY0 β ht x i
+    _ = (1 / 2) * ∫ x, ∫ y, g (x, y) ∂μY ∂μX := by
+      rw [integral_const_mul]
+    _ = (1 / 2) * ∫ p, g p ∂μX.prod μY := by
+      rw [integral_prod g hg]
+    _ = (1 / 2) *
+        ∫ z, softmaxHessianCovRow μY β z i ∂gaussianInterpMeasure μX μY t := by
+      rw [hmap]
+
 /-- Coordinate covariance of the interpolation law, before simplifying the square roots.
 
 The explicit `IsGaussian` assumption for the interpolation law avoids expensive typeclass search
