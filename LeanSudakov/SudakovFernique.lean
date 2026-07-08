@@ -1526,6 +1526,25 @@ theorem gaussian_interpolation_lse_mono_of_endpoint_stein
           exact ae_of_all (gaussianInterpMeasure μX μY t) fun z =>
             softmaxHessianCovDiffSum_eq μX μY β z
 
+theorem gaussian_interpolation_lse_mono_of_continuous
+    {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    [IsGaussian μX] [IsGaussian μY]
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
+      variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ variance (fun y : ι → ℝ => y i - y j) μY)
+    {β : ℝ} (hβ : 0 < β)
+    (hFcont : ContinuousOn (gaussianInterpolationLSE μX μY β) (Set.Icc 0 1)) :
+    ∫ x, lse β x ∂μX ≤ ∫ y, lse β y ∂μY := by
+  refine gaussian_interpolation_lse_mono_of_endpoint_stein μX μY hinc hβ hFcont ?_ ?_
+  · intro t ht i
+    exact product_y_endpoint_stein μX μY hY0 β ht i
+  · intro t ht i
+    exact product_x_endpoint_stein μX μY hX0 β ht i
+
 theorem le_of_forall_pos_le_add_div
     {a b c : ℝ}
     (h : ∀ β : ℝ, 0 < β → a ≤ b + c / β) :
