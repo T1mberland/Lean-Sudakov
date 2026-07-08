@@ -4,6 +4,7 @@ import Mathlib.MeasureTheory.Integral.DominatedConvergence
 import Mathlib.Topology.Order.MonotoneConvergence
 
 open Filter MeasureTheory
+open ProbabilityTheory
 open scoped BigOperators Topology
 
 noncomputable section
@@ -154,6 +155,112 @@ theorem tendsto_integral_countableApproxMax
     exact hbd.mono fun x hx => norm_countableApproxMax_le i0 n x hx
   · exact hbd.mono fun x hx => countableApproxMax_tendsto_countableSup i0 x hx
 
+theorem vecMax_finset_restrict
+    {ι : Type*} [DecidableEq ι] (s : Finset ι) (hs : s.Nonempty) (x : ι → ℝ) :
+    @vecMax {i // i ∈ s} _ hs.to_subtype (s.restrict (π := fun _ => ℝ) x) =
+      finsetMax s hs x := by
+  classical
+  letI : Nonempty s := hs.to_subtype
+  apply le_antisymm
+  · dsimp [vecMax]
+    refine Finset.sup'_le _ _ ?_
+    intro i _hi
+    exact Finset.le_sup' (s := s) (f := x) i.2
+  · rw [finsetMax]
+    refine Finset.sup'_le _ _ ?_
+    intro i hi
+    have hle :
+        x i ≤ @vecMax {i // i ∈ s} _ hs.to_subtype
+          (s.restrict (π := fun _ => ℝ) x) := by
+      dsimp [vecMax]
+      exact Finset.le_sup'
+        (s := (Finset.univ : Finset {i // i ∈ s}))
+        (f := s.restrict (π := fun _ => ℝ) x)
+        (Finset.mem_univ ⟨i, hi⟩)
+    simpa [Finset.restrict] using hle
+
+theorem integral_vecMax_finset_restrict_map
+    {ι : Type*} [DecidableEq ι] (μ : Measure (ι → ℝ))
+    (s : Finset ι) (hs : s.Nonempty) :
+    ∫ z, @vecMax {i // i ∈ s} _ hs.to_subtype z
+        ∂(μ.map (s.restrict (π := fun _ => ℝ))) =
+      ∫ x, finsetMax s hs x ∂μ := by
+  letI : Nonempty s := hs.to_subtype
+  rw [integral_map (Finset.measurable_restrict (X := fun _ : ι => ℝ) s).aemeasurable
+    measurable_vecMax.aestronglyMeasurable]
+  simp_rw [vecMax_finset_restrict s hs]
+
+theorem countable_sudakov_finite_comparison_of_projected_gaussian
+    {ι : Type*} [DecidableEq ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    (hXgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μX.map (s.restrict (π := fun _ => ℝ))))
+    (hYgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μY.map (s.restrict (π := fun _ => ℝ))))
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
+      ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY)
+    (s : Finset ι) (hs : s.Nonempty) :
+    ∫ x, finsetMax s hs x ∂μX ≤ ∫ y, finsetMax s hs y ∂μY := by
+  classical
+  letI : Nonempty {i // i ∈ s} := hs.to_subtype
+  let νX : Measure ({i // i ∈ s} → ℝ) := μX.map (s.restrict (π := fun _ => ℝ))
+  let νY : Measure ({i // i ∈ s} → ℝ) := μY.map (s.restrict (π := fun _ => ℝ))
+  have hproj_meas :
+      AEMeasurable (s.restrict (π := fun _ => ℝ)) μX :=
+    (Finset.measurable_restrict (X := fun _ : ι => ℝ) s).aemeasurable
+  have hproj_measY :
+      AEMeasurable (s.restrict (π := fun _ => ℝ)) μY :=
+    (Finset.measurable_restrict (X := fun _ : ι => ℝ) s).aemeasurable
+  letI : IsProbabilityMeasure νX := by
+    dsimp [νX]
+    exact Measure.isProbabilityMeasure_map hproj_meas
+  letI : IsProbabilityMeasure νY := by
+    dsimp [νY]
+    exact Measure.isProbabilityMeasure_map hproj_measY
+  letI : ProbabilityTheory.IsGaussian νX := by
+    simpa [νX] using hXgauss s hs
+  letI : ProbabilityTheory.IsGaussian νY := by
+    simpa [νY] using hYgauss s hs
+  have hνX0 : ∀ i : {i // i ∈ s}, ∫ z, z i ∂νX = 0 := by
+    intro i
+    dsimp [νX]
+    rw [integral_map hproj_meas (measurable_pi_apply i).aestronglyMeasurable]
+    simpa [Finset.restrict] using hX0 i
+  have hνY0 : ∀ i : {i // i ∈ s}, ∫ z, z i ∂νY = 0 := by
+    intro i
+    dsimp [νY]
+    rw [integral_map hproj_measY (measurable_pi_apply i).aestronglyMeasurable]
+    simpa [Finset.restrict] using hY0 i
+  have hνinc : ∀ i j : {i // i ∈ s},
+      ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νX
+        ≤ ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νY := by
+    intro i j
+    have hXm :
+        ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νX =
+          ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX := by
+      dsimp [νX]
+      rw [ProbabilityTheory.variance_map
+        ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hproj_meas]
+      rfl
+    have hYm :
+        ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νY =
+          ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY := by
+      dsimp [νY]
+      rw [ProbabilityTheory.variance_map
+        ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hproj_measY]
+      rfl
+    rw [hXm, hYm]
+    exact hinc i j
+  have hfinite := sudakov_fernique νX νY hνX0 hνY0 hνinc
+  dsimp [νX, νY] at hfinite
+  rw [integral_vecMax_finset_restrict_map μX s hs,
+    integral_vecMax_finset_restrict_map μY s hs] at hfinite
+  exact hfinite
+
 /-- Countable Sudakov-Fernique extension from all finite nonempty max comparisons.
 
 For countably many indices, mathlib currently cannot state Gaussianity directly on the product
@@ -179,5 +286,35 @@ theorem countable_sudakov_of_finset
   refine le_of_tendsto_of_tendsto' hlimX hlimY ?_
   intro n
   exact hfinite (countableApproxFinset i0 n) (countableApproxFinset_nonempty i0 n)
+
+/-- Countable Sudakov-Fernique from Gaussian finite-dimensional projection laws.
+
+The Gaussian hypotheses are stated for every finite projection law because mathlib's
+`ProbabilityTheory.IsGaussian` is currently formulated for normed real vector spaces, while the
+full countable product `ι → ℝ` is not a normed space in general. -/
+theorem countable_sudakov_of_projected_gaussian
+    {ι : Type*} [Countable ι] [DecidableEq ι] [Nonempty ι]
+    (μX μY : Measure (ι → ℝ))
+    [IsProbabilityMeasure μX] [IsProbabilityMeasure μY]
+    (hXgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μX.map (s.restrict (π := fun _ => ℝ))))
+    (hYgauss : ∀ (s : Finset ι) (_hs : s.Nonempty),
+      ProbabilityTheory.IsGaussian (μY.map (s.restrict (π := fun _ => ℝ))))
+    (hX0 : ∀ i, ∫ x, x i ∂μX = 0)
+    (hY0 : ∀ i, ∫ y, y i ∂μY = 0)
+    (hinc : ∀ i j,
+      ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX
+        ≤ ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY)
+    (hXcoord : ∀ i, Integrable (fun x : ι → ℝ => x i) μX)
+    (hYcoord : ∀ i, Integrable (fun y : ι → ℝ => y i) μY)
+    (hXbdd : ∀ᵐ x ∂μX, BddAbove (Set.range x))
+    (hYbdd : ∀ᵐ y ∂μY, BddAbove (Set.range y))
+    (hXint : Integrable (fun x : ι → ℝ => countableSup x) μX)
+    (hYint : Integrable (fun y : ι → ℝ => countableSup y) μY) :
+    ∫ x, countableSup x ∂μX ≤ ∫ y, countableSup y ∂μY := by
+  refine countable_sudakov_of_finset μX μY ?_ hXcoord hYcoord hXbdd hYbdd hXint hYint
+  intro s hs
+  exact countable_sudakov_finite_comparison_of_projected_gaussian
+    μX μY hXgauss hYgauss hX0 hY0 hinc s hs
 
 end
