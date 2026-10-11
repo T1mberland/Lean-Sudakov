@@ -1,5 +1,7 @@
 import LeanSudakov.Deterministic
 import LeanSudakov.CountableSudakov
+import LeanSudakov.Audit.Finite
+import LeanSudakov.Audit.Countable
 import LeanSudakov.GaussianIBP
 import LeanSudakov.GaussianVectorIBP
 import LeanSudakov.LSECalculus
