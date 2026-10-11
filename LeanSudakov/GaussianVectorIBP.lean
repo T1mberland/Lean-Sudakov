@@ -67,10 +67,13 @@ theorem continuous_softmax_deriv_term
     Continuous fun x : ι → ℝ =>
       β * ((if i = j then softmax β x i else 0) - softmax β x i * softmax β x j) := by
   by_cases hij : i = j
-  · simpa [hij] using
+  · subst j
+    simp only [ite_true]
+    exact
       continuous_const.mul
-        ((continuous_softmax β i).sub ((continuous_softmax β i).mul (continuous_softmax β j)))
-  · simpa [hij] using
+        ((continuous_softmax β i).sub ((continuous_softmax β i).mul (continuous_softmax β i)))
+  · simp only [hij, ite_false, zero_sub, mul_neg]
+    exact
       (continuous_const.mul ((continuous_softmax β i).mul (continuous_softmax β j))).neg
 
 theorem aestronglyMeasurable_softmax_deriv_term
@@ -121,13 +124,13 @@ theorem integrable_coord_mul_softmax_of_integrable_coord
     {μ : Measure (ι → ℝ)} {β : ℝ} {i j : ι}
     (hi : Integrable (fun x : ι → ℝ => x i) μ) :
     Integrable (fun x : ι → ℝ => x i * softmax β x j) μ := by
-  simpa [Pi.mul_apply] using hi.mul_of_top_left (memLp_top_softmax μ β j)
+  exact hi.mul_of_top_left (memLp_top_softmax μ β j)
 
 theorem gaussian_integrable_coord
     {ι : Type*} [Fintype ι]
     (μ : Measure (ι → ℝ)) [IsGaussian μ] (i : ι) :
     Integrable (fun x : ι → ℝ => x i) μ := by
-  simpa [coordCLM] using IsGaussian.integrable_dual μ (coordCLM i)
+  exact IsGaussian.integrable_dual μ (coordCLM i)
 
 theorem gaussian_integrable_coord_mul_softmax
     {ι : Type*} [Fintype ι]
@@ -144,8 +147,7 @@ theorem gaussian_memLp_id_two
     MemLp (id : (ι → ℝ) → (ι → ℝ)) 2 μ := by
   rw [memLp_pi_iff]
   intro i
-  simpa [Function.comp_def, coordCLM] using
-    (IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp))
+  exact IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)
 
 /-- Coordinate covariance matrix of a finite-dimensional Gaussian measure. -/
 def gaussianCov {ι : Type*} [Fintype ι]
@@ -243,9 +245,8 @@ theorem integrable_gaussianPDFReal_mul_id
   by_cases hv : v = 0
   · simp [hv, gaussianPDFReal_zero_var]
   have hid : Integrable (fun t : ℝ => t) (gaussianReal m v) := by
-    simpa [id] using
-      (memLp_one_iff_integrable.mp
-        (memLp_id_gaussianReal' (μ := m) (v := v) 1 (by simp)))
+    exact memLp_one_iff_integrable.mp
+      (memLp_id_gaussianReal' (μ := m) (v := v) 1 (by simp))
   rw [gaussianReal_of_var_ne_zero m hv] at hid
   have h :=
     (integrable_withDensity_iff_integrable_smul'
@@ -339,9 +340,8 @@ theorem gaussianReal_ibp_softmax_update
       Integrable
         (fun t : ℝ => gaussianPDFReal 0 v t *
           softmax β (Function.update x i t) j) := by
-    simpa only [Pi.mul_apply, mul_comm] using
-      (integrable_gaussianPDFReal 0 v).mul_of_top_right
-        (memLp_top_softmax_update β x i j)
+    exact (integrable_gaussianPDFReal 0 v).mul_of_top_left
+      (memLp_top_softmax_update β x i j)
   simpa using
     (gaussianReal_integral_centered_mul_eq_var_mul_integral_deriv
       (μ := 0) (v := v) hv
@@ -411,8 +411,7 @@ theorem gaussianCov_pi_gaussianReal_centered
   letI : IsGaussian (Measure.pi μ) := isGaussian_pi_gaussianReal_centered v
   have hcoord_memLp (k : ι) :
       MemLp (fun x : ι → ℝ => x k) 2 (Measure.pi μ) := by
-    simpa [μ, coordCLM] using
-      IsGaussian.memLp_dual (Measure.pi μ) (coordCLM k) 2 (by simp)
+    exact IsGaussian.memLp_dual (Measure.pi μ) (coordCLM k) 2 (by simp)
   by_cases hij : i = j
   · subst j
     rw [gaussianCov_eq_covariance]
@@ -438,12 +437,11 @@ theorem map_update_prod_pi
       Measure.pi μ := by
   classical
   have hmeas : Measurable (fun p : (ι → ℝ) × ℝ => (Function.update p.1 i p.2 : ι → ℝ)) := by
-    refine measurable_pi_lambda (fun p : (ι → ℝ) × ℝ => (Function.update p.1 i p.2 : ι → ℝ))
-      fun j : ι => ?_
+    refine Measurable.of_eval fun j : ι => ?_
     by_cases hji : j = i
     · subst j
       simpa [Function.update] using measurable_snd
-    · simpa [Function.update, hji] using
+    · simpa [Function.update, hji, Function.comp_def] using
         ((measurable_pi_apply j).comp measurable_fst)
   symm
   refine Measure.pi_eq (μ := μ) fun s hs => ?_
@@ -492,12 +490,11 @@ theorem integral_pi_update
       ∫ x, ∫ t, f (Function.update x i t) ∂μ i ∂Measure.pi μ := by
   have hmap := map_update_prod_pi μ i
   have hmeas : Measurable (fun p : (ι → ℝ) × ℝ => (Function.update p.1 i p.2 : ι → ℝ)) := by
-    refine measurable_pi_lambda (fun p : (ι → ℝ) × ℝ => (Function.update p.1 i p.2 : ι → ℝ))
-      fun j : ι => ?_
+    refine Measurable.of_eval fun j : ι => ?_
     by_cases hji : j = i
     · subst j
       simpa [Function.update] using measurable_snd
-    · simpa [Function.update, hji] using
+    · simpa [Function.update, hji, Function.comp_def] using
         ((measurable_pi_apply j).comp measurable_fst)
   have hf_map :
       Integrable f (Measure.map (fun p : (ι → ℝ) × ℝ => Function.update p.1 i p.2)
@@ -693,7 +690,7 @@ theorem integrable_coord_mul_softmax_comp_linear_of_integrable_coord
     {μ : Measure (κ → ℝ)} {β : ℝ} {L : (κ → ℝ) →L[ℝ] (ι → ℝ)} {a : κ} {j : ι}
     (ha : Integrable (fun z : κ → ℝ => z a) μ) :
     Integrable (fun z : κ → ℝ => z a * softmax β (L z) j) μ := by
-  simpa [Pi.mul_apply] using ha.mul_of_top_left (memLp_top_softmax_comp_linear μ β L j)
+  exact ha.mul_of_top_left (memLp_top_softmax_comp_linear μ β L j)
 
 /-- Coordinate covariance of a linear image of an independent centered Gaussian product. -/
 theorem gaussianCov_map_linear_pi_gaussianReal_centered
@@ -707,7 +704,7 @@ theorem gaussianCov_map_linear_pi_gaussianReal_centered
   letI : IsGaussian μ := isGaussian_pi_gaussianReal_centered v
   letI : IsGaussian (μ.map L) := isGaussian_map L
   have hmem (a : κ) : MemLp (fun z : κ → ℝ => z a) 2 μ := by
-    simpa [μ, coordCLM] using IsGaussian.memLp_dual μ (coordCLM a) 2 (by simp)
+    exact IsGaussian.memLp_dual μ (coordCLM a) 2 (by simp)
   have hterm (c : κ → ℝ) (a : κ) :
       MemLp (fun z : κ → ℝ => z a * c a) 2 μ := by
     simpa [mul_comm] using (hmem a).const_mul (c a)
@@ -784,7 +781,7 @@ theorem gaussianCov_map_linear_covFactor_of_matrix_factor
       gaussianCov μ i j =
           (Finset.univ.sum fun a : Fin m => Matrix.vecMulVec (u a) (star (u a))) i j := hentry
       _ = Finset.univ.sum fun a : Fin m => u a i * u a j := by
-        rw [Finset.sum_apply, Finset.sum_apply]
+        rw [Matrix.sum_apply]
         simp [Matrix.vecMulVec_apply]
   exact hentry'.symm
 
@@ -945,6 +942,7 @@ theorem hasDerivAt_softmax_linear_update
   have hquot := (hasDerivAt_exp_linear_image_update β L z a j).div
     (hasDerivAt_expSum_linear_image_update β L z a) hden_ne
   convert hquot using 1
+  · rfl
   · simp [Function.update_eq_self, softmax]
     field_simp [hsum_ne]
     ring_nf
@@ -1134,9 +1132,8 @@ theorem gaussianReal_ibp_softmax_linear_update_centered
         Integrable
           (fun t : ℝ => gaussianPDFReal 0 v t *
             softmax β (L (Function.update z a t)) j) := by
-      simpa only [Pi.mul_apply, mul_comm] using
-        (integrable_gaussianPDFReal 0 v).mul_of_top_right
-          (memLp_top_softmax_linear_update β L z a j)
+      exact (integrable_gaussianPDFReal 0 v).mul_of_top_left
+        (memLp_top_softmax_linear_update β L z a j)
     simpa using
       (gaussianReal_integral_centered_mul_eq_var_mul_integral_deriv
         (μ := 0) (v := v) hv
@@ -1338,8 +1335,7 @@ private theorem integrable_coord_mul_softmax_affine_comp_linear_of_integrable_co
     {L : (κ → ℝ) →L[ℝ] (ι → ℝ)} {a : κ} {j : ι}
     (ha : Integrable (fun z : κ → ℝ => z a) μ) :
     Integrable (fun z : κ → ℝ => z a * softmax β (fun i => c i + L z i) j) μ := by
-  simpa [Pi.mul_apply] using
-    ha.mul_of_top_left (memLp_top_softmax_affine_comp_linear μ β c L j)
+  exact ha.mul_of_top_left (memLp_top_softmax_affine_comp_linear μ β c L j)
 
 private theorem integrable_softmax_affine_linear_deriv_sum
     {κ ι : Type*} [Fintype κ] [DecidableEq κ] [Fintype ι] [DecidableEq ι]
@@ -1543,7 +1539,7 @@ theorem gaussian_ibp_softmax_map_linear_pi
     β * ((if j = k then softmax β (L z) j else 0) -
       softmax β (L z) j * softmax β (L z) k)
   have hD_int (k : ι) : Integrable (D k) μ := by
-    simpa [D] using integrable_softmax_deriv_term ν β j k |>.comp_measurable L.measurable
+    exact integrable_softmax_deriv_term ν β j k |>.comp_measurable L.measurable
   calc
     ∫ x, x i * softmax β x j ∂((Measure.pi fun a => gaussianReal 0 (v a)).map L)
         = ∫ z, L z i * softmax β (L z) j ∂μ := by
@@ -1892,9 +1888,9 @@ theorem gaussian_variance_sub_eq_cov
     variance (fun x : ι → ℝ => x i - x j) μ =
       gaussianCov μ i i - 2 * gaussianCov μ i j + gaussianCov μ j j := by
   have hi2 : MemLp (fun x : ι → ℝ => x i) 2 μ := by
-    simpa [coordCLM] using IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)
+    exact IsGaussian.memLp_dual μ (coordCLM i) 2 (by simp)
   have hj2 : MemLp (fun x : ι → ℝ => x j) 2 μ := by
-    simpa [coordCLM] using IsGaussian.memLp_dual μ (coordCLM j) 2 (by simp)
+    exact IsGaussian.memLp_dual μ (coordCLM j) 2 (by simp)
   rw [variance_fun_sub hi2 hj2]
   rw [← covariance_self hi2.aemeasurable]
   rw [← covariance_self hj2.aemeasurable]

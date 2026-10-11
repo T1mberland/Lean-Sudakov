@@ -1431,16 +1431,16 @@ theorem gaussianCov_gaussianInterpMeasure
           (fun p : (ι → ℝ) × (ι → ℝ) => p.2 j); μ] = 0 := by
     simpa [μ] using covariance_fst_snd_prod (μ := μX) (ν := μY)
       (X := fun x : ι → ℝ => x i) (Y := fun y : ι → ℝ => y j)
-      (by simpa [coordCLM] using IsGaussian.memLp_dual μX (coordCLM i) 2 (by simp))
-      (by simpa [coordCLM] using IsGaussian.memLp_dual μY (coordCLM j) 2 (by simp))
+      (IsGaussian.memLp_dual μX (coordCLM i) 2 (by simp))
+      (IsGaussian.memLp_dual μY (coordCLM j) 2 (by simp))
   have hcross₂ :
       cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.2 i),
           (fun p : (ι → ℝ) × (ι → ℝ) => p.1 j); μ] = 0 := by
     rw [covariance_comm]
     simpa [μ] using covariance_fst_snd_prod (μ := μX) (ν := μY)
       (X := fun x : ι → ℝ => x j) (Y := fun y : ι → ℝ => y i)
-      (by simpa [coordCLM] using IsGaussian.memLp_dual μX (coordCLM j) 2 (by simp))
-      (by simpa [coordCLM] using IsGaussian.memLp_dual μY (coordCLM i) 2 (by simp))
+      (IsGaussian.memLp_dual μX (coordCLM j) 2 (by simp))
+      (IsGaussian.memLp_dual μY (coordCLM i) 2 (by simp))
   have hfst :
       cov[(fun p : (ι → ℝ) × (ι → ℝ) => p.1 i),
           (fun p : (ι → ℝ) × (ι → ℝ) => p.1 j); μ] =

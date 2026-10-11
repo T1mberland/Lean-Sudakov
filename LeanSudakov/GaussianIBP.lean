@@ -17,13 +17,12 @@ theorem hasDerivAt_gaussianPDFReal
   have hderiv := ((hasDerivAt_const (x := x) ((√(2 * π * (v : ℝ)))⁻¹)).mul
     (((((hasDerivAt_id x).sub_const μ).pow 2).neg.div_const (2 * (v : ℝ))).exp))
   convert hderiv using 1
-  simp only [id_eq]
-  field_simp [hv']
-  rw [show ((-(fun x : ℝ => x - μ) ^ 2) x / ((v : ℝ) * 2)) =
-      -((x - μ) ^ 2 / ((v : ℝ) * 2)) by
-        change -((x - μ) ^ 2) / ((v : ℝ) * 2) = -((x - μ) ^ 2 / ((v : ℝ) * 2))
-        ring]
-  ring
+  · ext y
+    simp only [Pi.mul_apply, Pi.neg_apply, Pi.pow_apply, id_eq, neg_div]
+  · dsimp
+    simp only [neg_div]
+    field_simp [hv']
+    ring
 
 /-- One-dimensional Gaussian integration by parts, written against Lebesgue measure and the
 Gaussian density. -/
@@ -44,7 +43,8 @@ theorem gaussianPDFReal_integral_centered_mul_eq_var_mul_integral_deriv
         (u := gaussianPDFReal μ v)
         (u' := fun x => -(x - μ) / (v : ℝ) * gaussianPDFReal μ v x)
         (v := f) (v' := f')
-        (hasDerivAt_gaussianPDFReal hv) hf h_deriv h_center_deriv h_prod)
+        (fun x _ => hasDerivAt_gaussianPDFReal hv x) (fun x _ => hf x)
+        h_deriv h_center_deriv h_prod)
   rw [hibp]
   rw [← integral_neg]
   rw [← integral_const_mul]

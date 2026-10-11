@@ -214,8 +214,10 @@ theorem countable_sudakov_finite_comparison_drift
   have hprojinc (i j : s) :
       variance (fun z : s → ℝ => z i - z j) (μX.map (s.restrict (π := fun _ => ℝ))) ≤
         variance (fun z : s → ℝ => z i - z j) (μY.map (s.restrict (π := fun _ => ℝ))) := by
-    rw [variance_map ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hXm,
-      variance_map ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hYm]
+    rw [variance_map (X := fun z : s → ℝ => z i - z j)
+        ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hXm,
+      variance_map (X := fun z : s → ℝ => z i - z j)
+        ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hYm]
     exact hinc i j
   have h := sudakov_fernique_drift _ _ hXcenter hYcenter hprojinc (s.restrict a)
   rwa [integral_vecMax_finset_restrict_map_drift μX a s hs,

@@ -217,10 +217,10 @@ theorem countable_sudakov_finite_comparison_of_projected_gaussian
     (Finset.measurable_restrict (X := fun _ : ι => ℝ) s).aemeasurable
   letI : IsProbabilityMeasure νX := by
     dsimp [νX]
-    exact Measure.isProbabilityMeasure_map hproj_meas
+    infer_instance
   letI : IsProbabilityMeasure νY := by
     dsimp [νY]
-    exact Measure.isProbabilityMeasure_map hproj_measY
+    infer_instance
   letI : ProbabilityTheory.IsGaussian νX := by
     simpa [νX] using hXgauss s hs
   letI : ProbabilityTheory.IsGaussian νY := by
@@ -243,14 +243,14 @@ theorem countable_sudakov_finite_comparison_of_projected_gaussian
         ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νX =
           ProbabilityTheory.variance (fun x : ι → ℝ => x i - x j) μX := by
       dsimp [νX]
-      rw [ProbabilityTheory.variance_map
+      rw [ProbabilityTheory.variance_map (X := fun z : s → ℝ => z i - z j)
         ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hproj_meas]
       rfl
     have hYm :
         ProbabilityTheory.variance (fun z : {i // i ∈ s} → ℝ => z i - z j) νY =
           ProbabilityTheory.variance (fun y : ι → ℝ => y i - y j) μY := by
       dsimp [νY]
-      rw [ProbabilityTheory.variance_map
+      rw [ProbabilityTheory.variance_map (X := fun z : s → ℝ => z i - z j)
         ((measurable_pi_apply i).sub (measurable_pi_apply j)).aemeasurable hproj_measY]
       rfl
     rw [hXm, hYm]
@@ -278,7 +278,7 @@ theorem integrable_coord_of_projected_gaussian
   letI : ProbabilityTheory.IsGaussian ν := by
     simpa [ν, s, hs] using hgauss s hs
   have hcoord : Integrable (fun z : {j // j ∈ s} → ℝ => z idx) ν := by
-    simpa [coordCLM] using IsGaussian.integrable_dual ν (coordCLM idx)
+    exact IsGaussian.integrable_dual ν (coordCLM idx)
   have hcomp : Integrable ((fun z : {j // j ∈ s} → ℝ => z idx) ∘
       (s.restrict (π := fun _ => ℝ))) μ :=
     (integrable_map_measure hcoord.aestronglyMeasurable hproj_meas).1 hcoord

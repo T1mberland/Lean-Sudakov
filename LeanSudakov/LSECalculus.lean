@@ -63,9 +63,10 @@ theorem hasDerivAt_lse_update
   have hlog := (hasDerivAt_expSum_update β x i).log ?_
   · have hdiv := hlog.div_const β
     convert hdiv using 1
-    rw [update_self x i]
-    simp [softmax]
-    field_simp [hβ, hSpos.ne']
+    · rfl
+    · rw [update_self x i]
+      simp [softmax]
+      field_simp [hβ, hSpos.ne']
   · simpa [update_self x i] using hSpos.ne'
 
 /-- Coordinate derivative of log-sum-exp, as a `deriv` identity. -/
@@ -89,18 +90,19 @@ theorem hasDerivAt_softmax_update
   have hquot := (hasDerivAt_exp_update_coord β x j i).div
     (hasDerivAt_expSum_update β x j) ?_
   · convert hquot using 1
-    rw [update_self x j]
-    simp [softmax]
-    by_cases hij : i = j
-    · subst j
-      field_simp [S, hSpos.ne']
-      simp
-      have hsum_ne : (Finset.univ.sum fun k => Real.exp (β * x k)) ≠ 0 := by
-        simpa [S] using hSpos.ne'
-      field_simp [hsum_ne]
-    · field_simp [S, hSpos.ne', hij]
-      simp [hij]
-      ring_nf
+    · rfl
+    · rw [update_self x j]
+      simp [softmax]
+      by_cases hij : i = j
+      · subst j
+        field_simp [S, hSpos.ne']
+        simp
+        have hsum_ne : (Finset.univ.sum fun k => Real.exp (β * x k)) ≠ 0 := by
+          simpa [S] using hSpos.ne'
+        field_simp [hsum_ne]
+      · field_simp [S, hSpos.ne', hij]
+        simp [hij]
+        ring_nf
   · simpa [S, update_self x j] using hSpos.ne'
 
 /-- Hessian entry of log-sum-exp, as a `deriv` identity for softmax. -/

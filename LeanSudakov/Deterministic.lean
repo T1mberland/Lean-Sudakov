@@ -104,8 +104,7 @@ theorem neg_sum_abs_le_vecMax
   have hcoord : -((Finset.univ).sum fun i => |x i|) ≤ x i₀ := by
     exact (neg_le_neg hsingle).trans (neg_abs_le (x i₀))
   have hle_max : x i₀ ≤ vecMax x := by
-    simpa [vecMax] using
-      (Finset.le_sup' (s := (Finset.univ : Finset ι)) (f := x) (Finset.mem_univ i₀))
+    exact Finset.le_sup' (s := (Finset.univ : Finset ι)) (f := x) (Finset.mem_univ i₀)
   exact hcoord.trans hle_max
 
 theorem vecMax_le_sum_abs
