@@ -53,21 +53,14 @@ theorem hasDerivAt_gaussianInterpMap_apply
   · field_simp [ht_ne, h1t_ne]
     ring
 
-/-- Pointwise derivative of log-sum-exp along the Gaussian interpolation path. -/
-theorem hasDerivAt_lse_gaussianInterpMap
+/-- Chain rule for log-sum-exp along a coordinatewise differentiable path. -/
+theorem hasDerivAt_lse_of_coord
     {ι : Type*} [Fintype ι] [Nonempty ι]
-    {β t : ℝ} (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
-    (p : (ι → ℝ) × (ι → ℝ)) :
-    HasDerivAt (fun s => lse β (gaussianInterpMap (ι := ι) s p))
-      (Finset.univ.sum fun i =>
-        softmax β (gaussianInterpMap (ι := ι) t p) i *
-          ((p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t)))) t := by
+    {β t : ℝ} (hβ : β ≠ 0) (z : ℝ → ι → ℝ) (dz : ι → ℝ)
+    (hz : ∀ i, HasDerivAt (fun s => z s i) (dz i) t) :
+    HasDerivAt (fun s => lse β (z s))
+      (Finset.univ.sum fun i => softmax β (z t) i * dz i) t := by
   classical
-  let z : ℝ → ι → ℝ := fun s => gaussianInterpMap (ι := ι) s p
-  let dz : ι → ℝ := fun i =>
-    (p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t))
-  have hz (i : ι) : HasDerivAt (fun s => z s i) (dz i) t := by
-    simpa [z, dz] using hasDerivAt_gaussianInterpMap_apply ht p i
   have hexp (i : ι) :
       HasDerivAt (fun s => Real.exp (β * z s i))
         (β * dz i * Real.exp (β * z t i)) t := by
@@ -101,6 +94,17 @@ theorem hasDerivAt_lse_gaussianInterpMap
   rw [Finset.mul_sum]
   refine Finset.sum_congr rfl fun i _ => ?_
   field_simp [hSpos.ne']
+
+/-- Pointwise derivative of log-sum-exp along the Gaussian interpolation path. -/
+theorem hasDerivAt_lse_gaussianInterpMap
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    {β t : ℝ} (hβ : β ≠ 0) (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    HasDerivAt (fun s => lse β (gaussianInterpMap (ι := ι) s p))
+      (Finset.univ.sum fun i =>
+        softmax β (gaussianInterpMap (ι := ι) t p) i *
+          ((p.2 i) / (2 * Real.sqrt t) - (p.1 i) / (2 * Real.sqrt (1 - t)))) t := by
+  exact hasDerivAt_lse_of_coord hβ _ _ (hasDerivAt_gaussianInterpMap_apply ht p)
 
 /-- Pointwise `deriv` form of the log-sum-exp derivative along the interpolation path. -/
 theorem deriv_lse_gaussianInterpMap
@@ -164,12 +168,14 @@ private theorem one_div_two_sqrt_le_one_div_two_sqrt
     nlinarith [hsqrt_le]
   exact one_div_le_one_div_of_le hden_pos hden_le
 
-theorem gaussianInterpLSEDerivIntegrand_le_bound
+/-- The derivative bound depends only on the softmax bounds, not on its argument. -/
+theorem softmax_interp_deriv_le_bound
     {ι : Type*} [Fintype ι] [Nonempty ι]
-    (β : ℝ) {t s : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (β : ℝ) (z : ι → ℝ) {t s : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
     (hs : s ∈ Set.Ioo (t / 2) ((t + 1) / 2))
     (p : (ι → ℝ) × (ι → ℝ)) :
-    ‖gaussianInterpLSEDerivIntegrand (ι := ι) β s p‖ ≤
+    ‖Finset.univ.sum fun i => softmax β z i *
+      (p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s)))‖ ≤
       gaussianInterpLSEDerivBound (ι := ι) t p := by
   classical
   have hs_pos : 0 < s := by linarith [ht.1, hs.1]
@@ -184,25 +190,25 @@ theorem gaussianInterpLSEDerivIntegrand_le_bound
         1 / (2 * Real.sqrt ((1 - t) / 2)) := by
     have hle : (1 - t) / 2 ≤ 1 - s := by linarith [hs.2]
     exact one_div_two_sqrt_le_one_div_two_sqrt h1t_half_pos hle
-  rw [gaussianInterpLSEDerivIntegrand, Real.norm_eq_abs]
+  rw [Real.norm_eq_abs]
   calc
     |Finset.univ.sum fun i =>
-        softmax β (gaussianInterpMap (ι := ι) s p) i *
+        softmax β z i *
           (p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s)))|
         ≤ Finset.univ.sum fun i =>
-            |softmax β (gaussianInterpMap (ι := ι) s p) i *
+            |softmax β z i *
               (p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s)))| := by
           exact Finset.abs_sum_le_sum_abs _ _
     _ ≤ gaussianInterpLSEDerivBound (ι := ι) t p := by
       refine Finset.sum_le_sum fun i _ => ?_
       rw [abs_mul]
       calc
-        |softmax β (gaussianInterpMap (ι := ι) s p) i| *
+        |softmax β z i| *
             |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))|
             ≤ 1 *
               |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))| := by
               exact mul_le_mul_of_nonneg_right
-                (abs_softmax_le_one β (gaussianInterpMap (ι := ι) s p) i) (abs_nonneg _)
+                (abs_softmax_le_one β z i) (abs_nonneg _)
         _ = |p.2 i / (2 * Real.sqrt s) - p.1 i / (2 * Real.sqrt (1 - s))| := by ring
         _ ≤ (1 / (2 * Real.sqrt (t / 2))) * |p.2 i| +
               (1 / (2 * Real.sqrt ((1 - t) / 2))) * |p.1 i| := by
@@ -223,6 +229,15 @@ theorem gaussianInterpLSEDerivIntegrand_le_bound
             _ = (1 / (2 * Real.sqrt (t / 2))) * |p.2 i| +
                   (1 / (2 * Real.sqrt ((1 - t) / 2))) * |p.1 i| := by
               ring
+
+theorem gaussianInterpLSEDerivIntegrand_le_bound
+    {ι : Type*} [Fintype ι] [Nonempty ι]
+    (β : ℝ) {t s : ℝ} (ht : t ∈ Set.Ioo (0 : ℝ) 1)
+    (hs : s ∈ Set.Ioo (t / 2) ((t + 1) / 2))
+    (p : (ι → ℝ) × (ι → ℝ)) :
+    ‖gaussianInterpLSEDerivIntegrand (ι := ι) β s p‖ ≤
+      gaussianInterpLSEDerivBound (ι := ι) t p := by
+  exact softmax_interp_deriv_le_bound β (gaussianInterpMap s p) ht hs p
 
 theorem integrable_gaussianInterpLSEDerivBound
     {ι : Type*} [Fintype ι]
