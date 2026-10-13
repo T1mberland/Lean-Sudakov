@@ -15,6 +15,8 @@ import Mathlib.LinearAlgebra.Pi
 open MeasureTheory ProbabilityTheory
 open scoped BigOperators ENNReal NNReal
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- The `i`-th coordinate projection as a continuous linear map. -/
@@ -1984,3 +1986,5 @@ theorem gaussian_ibp_linear_coord
 -- The theorem above proves this identity for the linear coordinate test function `f x = x j`.
 
 end
+
+end LeanSudakov

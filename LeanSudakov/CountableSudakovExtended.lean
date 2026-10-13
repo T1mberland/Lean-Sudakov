@@ -4,6 +4,8 @@ import Mathlib.MeasureTheory.Integral.Lebesgue.Add
 open Filter MeasureTheory ProbabilityTheory
 open scoped BigOperators ENNReal
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- The nonnegative extended supremum above a fixed coordinate. Including `i0` in the
@@ -230,3 +232,5 @@ theorem countable_sudakov_lintegral
   exact countable_sudakov μX μY hXgauss hYgauss hX0 hY0 hinc
 
 end
+
+end LeanSudakov

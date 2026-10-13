@@ -4,6 +4,8 @@ import Mathlib.Probability.Distributions.Gaussian.Real
 open MeasureTheory ProbabilityTheory
 open scoped ENNReal NNReal Real
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- Derivative of the one-dimensional Gaussian density. -/
@@ -76,3 +78,5 @@ theorem gaussianReal_integral_centered_mul_eq_var_mul_integral_deriv
   ring
 
 end
+
+end LeanSudakov

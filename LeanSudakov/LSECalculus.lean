@@ -8,6 +8,8 @@ import Mathlib.Tactic.Ring
 
 open scoped BigOperators
 
+namespace LeanSudakov
+
 noncomputable section
 
 private lemma expSum_pos {ι : Type*} [Fintype ι]
@@ -114,3 +116,5 @@ theorem deriv_softmax_update
   (hasDerivAt_softmax_update β x i j).deriv
 
 end
+
+end LeanSudakov

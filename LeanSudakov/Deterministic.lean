@@ -8,6 +8,8 @@ import Mathlib.Tactic.Ring
 
 open scoped BigOperators
 
+namespace LeanSudakov
+
 noncomputable section
 
 def vecMax {ι : Type*} [Fintype ι] [Nonempty ι]
@@ -358,3 +360,5 @@ theorem hessian_cov_nonneg_softmax
 --   sorry
 
 end
+
+end LeanSudakov

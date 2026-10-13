@@ -7,6 +7,8 @@ open Filter MeasureTheory
 open ProbabilityTheory
 open scoped BigOperators Topology
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- Supremum of a countable real family. The countable theorem below assumes this family is
@@ -366,3 +368,5 @@ theorem countable_sudakov_of_projected_gaussian'
     hXbdd hYbdd hXint hYint
 
 end
+
+end LeanSudakov

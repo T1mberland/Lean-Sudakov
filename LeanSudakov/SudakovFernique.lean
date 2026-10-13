@@ -12,6 +12,8 @@ open MeasureTheory
 open ProbabilityTheory
 open scoped BigOperators Topology ENNReal
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- The linear interpolation map
@@ -1773,3 +1775,5 @@ theorem sudakov_fernique
     (fun {_β} hβ => gaussian_interpolation_lse_mono μX μY hX0 hY0 hinc hβ)
 
 end
+
+end LeanSudakov

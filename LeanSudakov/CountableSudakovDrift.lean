@@ -6,6 +6,8 @@ import Mathlib.Topology.Order.Monotone
 open Filter MeasureTheory ProbabilityTheory
 open scoped BigOperators ENNReal Topology
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- Extended expected supremum, retaining negative finite values as well as `+∞`.
@@ -276,3 +278,5 @@ theorem countable_sudakov_drift_lintegral
   exact h
 
 end
+
+end LeanSudakov

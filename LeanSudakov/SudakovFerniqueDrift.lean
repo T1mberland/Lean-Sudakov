@@ -3,6 +3,8 @@ import LeanSudakov.SudakovFernique
 open Filter MeasureTheory ProbabilityTheory
 open scoped BigOperators Topology ENNReal
 
+namespace LeanSudakov
+
 noncomputable section
 
 /-- Interpolation with a common deterministic drift held fixed. -/
@@ -325,3 +327,5 @@ theorem sudakov_fernique_drift
     _ = _ := by rw [integral_add hY (integrable_const _), integral_const]; simp
 
 end
+
+end LeanSudakov
